@@ -10,31 +10,46 @@ import math
 import random
 import copy
 
-# parsing arguments
-parser = argparse.ArgumentParser(description='')
-parser.add_argument('matrica_ruta', help='Ime fajla za matricu ruta u .tsv file formatu ')
-parser.add_argument('matrica_povezanosti', help='Ime fajla za matricu povezanosti u .tsv file formatu ')
 
-args = parser.parse_args()
-matrica_ruta_file_name = args.matrica_ruta
-matrica_povezanosti_file_name = args.matrica_povezanosti
+def parsing_argumts():
+    # parsing arguments
+    parser = argparse.ArgumentParser(description='')
+    parser.add_argument('matrica_linkova', help='Ime fajla za matricu ruta u .tsv file formatu ')
+    parser.add_argument('matrica_povezanosti', help='Ime fajla za matricu povezanosti u .tsv file formatu ')
 
-####
-matrica_ruta = genfromtxt(matrica_ruta_file_name, delimiter='\t')
-matrica_povezanosti = genfromtxt(matrica_povezanosti_file_name, delimiter='\t')
-######
+    args = parser.parse_args()
+    matrica_linkova_file_name = args.matrica_linkova
+    matrica_povezanosti_file_name = args.matrica_povezanosti
 
-matrica_povezanosti = genfromtxt('matrica_povezanosti_sa_papira.tsv', delimiter='\t')
+    return matrica_linkova_file_name, matrica_povezanosti_file_name 
 
-matrica_ruta = np.matrix("0 1 1 0;1 0 1 1;1 1 0 1;0 1 1 0")
-matrica_povezanosti = matrica_povezanosti.astype(np.int)
-matrica_povezanosti = matrica_povezanosti[matrica_povezanosti[:,0].argsort()] # sortirana_po_poocetnom_cvoru
-
-#### matrica_zahteva
-dimenzija_kvadratne_matrice = len(matrica_ruta)
-
-def napravi_matricu(donja_granica,gornja_granica, dimenzija_kvadratne_matrice, dijagola_nule =False):
+def load_matrices_from_files_names(matrica_linkova_file_name, 
+                                   matrica_povezanosti_file_name):
     
+    ## hardcoded values for loading matrices
+    matrica_linkova = np.matrix("0 1 1 0;1 0 1 1;1 1 0 1;0 1 1 0")
+    matrica_povezanosti = genfromtxt('matrica_povezanosti_sa_papira.tsv', delimiter='\t')
+#    matrica_linkova = genfromtxt(matrica_linkova_file_name, delimiter='\t')
+#    matrica_povezanosti = genfromtxt(matrica_povezanosti_file_name, delimiter='\t')
+    # convert to matrix values to int 
+    matrica_povezanosti = matrica_povezanosti.astype(np.int)
+    # sortiraj po poocetnom cvoru
+    matrica_povezanosti = matrica_povezanosti[matrica_povezanosti[:,0].argsort()] 
+
+    return matrica_linkova, matrica_povezanosti
+
+
+matrica_linkova, matrica_povezanosti = load_matrices_from_files_names("dummy1", "dummy2")
+#### matrica_zahteva
+dimenzija_kvadratne_matrice = len(matrica_linkova)
+ 
+
+# matrica povezanosti je matrica requstetova, cija je dimenzija 3 x broj konekcija koje treba da se ostavare 
+
+
+# za slucaj da je potrebno samo dati maticu zahteva i matricu linkova
+# zato postoje ove dve funcije napravi_matricu_zahteva napravi_matricu_povezanosti_od_matrice_zahteva
+def napravi_matricu(donja_granica,gornja_granica, dimenzija_kvadratne_matrice, dijagola_nule =False):
     rows = dimenzija_kvadratne_matrice
     columns = dimenzija_kvadratne_matrice
     matrica = np.array([[random.randrange(donja_granica, gornja_granica+1) 
@@ -45,6 +60,7 @@ def napravi_matricu(donja_granica,gornja_granica, dimenzija_kvadratne_matrice, d
     return matrica
 
 
+# pravi matricu zahteva sa nasumicnim vrednostima
 matrica_zahteva = napravi_matricu(0,5,dimenzija_kvadratne_matrice, dijagola_nule=True)
 
 
@@ -58,9 +74,9 @@ napravi_matricu_povezanosti_od_matrice_zahteva(matrica_zahteva)
 
 #crtanje grapha 
 
-def Nacrtaj_graph(matrica_ruta):
+def Nacrtaj_graph(matrica_linkova):
     
-    G = nx.from_numpy_matrix(matrica_ruta, create_using=nx.MultiDiGraph())
+    G = nx.from_numpy_matrix(matrica_linkova, create_using=nx.MultiDiGraph())
     pos = nx.circular_layout(G)
     nx.draw_circular(G)
     labels = {i : i +1 for i in G.nodes()}
@@ -69,7 +85,7 @@ def Nacrtaj_graph(matrica_ruta):
     
     return G
 ########################
-Graph = Nacrtaj_graph(matrica_ruta)
+Graph = Nacrtaj_graph(matrica_linkova)
 
 
 def all_paths(Graph, pocetni_cvor, terminalni_cvor):
@@ -84,9 +100,7 @@ def all_paths(Graph, pocetni_cvor, terminalni_cvor):
 paths = all_paths(Graph,3,4)
 
 
-
-# da li treba da pravim matricu_zahteva
-def Korak_1(broj_pcela, matrica_povezanosti): 
+def Korak_1_pravljenje_pcele_sa_izmesanim_rutama(broj_pcela, matrica_povezanosti): 
     
     #svaki red u matrici povezanosti je jenda ruta, sto znaci da je pcela matrica povezanosti -->samo suffle
     lista_pcela = []
@@ -142,26 +156,174 @@ def Korak_2_1(info_pcela):
     for i in range(broj_pcela):
         rute_za_preracuvanje.append([i])
     
-    for index, pcela in enumerate(lista_pcela_kopija):
-        for broj_pcela, ruta in enumerate(pcela):
-            if pcela[0][0]== ruta[0]:
-                rute_za_preracuvanje[index].append(ruta)
+    for index, lista_requestova_u_pceli in enumerate(lista_pcela_kopija):
+        for request_num, request in enumerate(lista_requestova_u_pceli):
+            if lista_requestova_u_pceli[0][0]== request[0]:
+                # skida prvu rutu sa pcele i stavlja je u dict koje se zove
+                # ruta_za_preracuvanje gde za svaku se skida po jedna ruta
+                rute_za_preracuvanje[index].append(request)
             else: 
-                nova_pcela.append(ruta)
+                nova_pcela.append(request)
         lista_pcela_posle_brisanja_ruta.append(nova_pcela)
         nova_pcela = []
     
     
     return (rute_za_preracuvanje, lista_pcela_posle_brisanja_ruta)
 
+
+info_pcela = Korak_1_pravljenje_pcele_sa_izmesanim_rutama(broj_pcela = 5,
+                                                          matrica_povezanosti = matrica_povezanosti)
+
+pcela = info_pcela.lista_pcela[0]
+
+def nadji_requestove_sa_istim_pocetnim_cvorom_u_pceli(pocetni_request,
+                                                      ostatak_requestova):
+    requestove_sa_istim_pocetnim_cvorom = [pocetni_request]
+    indeksi_requstova_koji_su_ostali = []
+    pocetni_cvor = pocetni_request[0]
+    for index,ostk_request in enumerate(ostatak_requestova):
+        if ostk_request[0] == pocetni_cvor:
+            requestove_sa_istim_pocetnim_cvorom.append(ostk_request)
+        else:
+            indeksi_requstova_koji_su_ostali.append(index)
+            
+    
+    return requestove_sa_istim_pocetnim_cvorom, indeksi_requstova_koji_su_ostali
+    
+def Racunaj_H(G,X,Y,Z,W):
+    # X broj zajednickih linkova
+    # Y duzina rute koje se razmatra sa grupisanje
+    # Z duzina prve izabrane rute
+    # W broj slotova te rute -fs
+    # G zastitni opseg
+    H = 2*G*X-(Y-Z)*W
+    return H
+
+    
+def proveri_da_li_rute_sadrze_iste_cvorove(ruta_1, ruta_2):
+    
+    len_of_ruta_2 = len(ruta_2)
+    index_na_kome_je_predhodni_match = -1
+    # broj zajednckih linkova je -1 posto su potrebna dva uzastopna match-a jesu link
+    broj_zajednickih_linkova = -1
+    for i_1, cvor_1 in enumerate(ruta_1):
+        if i_1 == len_of_ruta_2:
+            break
+        preklapaju_se = False
+        for i_2,cvor_2 in enumerate(ruta_2):
+            if cvor_1 == cvor_2:
+                print(index_na_kome_je_predhodni_match,i_2)
+                if i_2 > index_na_kome_je_predhodni_match:
+                    preklapaju_se = True
+                    if i_2 - index_na_kome_je_predhodni_match == 1 :
+                        broj_zajednickih_linkova = broj_zajednickih_linkova + 1
+                else:
+                    return False
+                index_na_kome_je_predhodni_match = i_2
+                break
+    
+    return preklapaju_se, broj_zajednickih_linkova
+    
+    
+def ako_se_praklapaju_racunaj_h(ruta_sa_kojom_se_poredi,
+                                potencijalne_rute):
+    
+    *ruta_sa_kojom_se_poredi_bez_fs, fs = ruta_sa_kojom_se_poredi
+    len_of_ruta_sa_kojom_se_poredi_bez_fs = len(ruta_sa_kojom_se_poredi_bez_fs)
+    fs_potencijalne_rute = potencijalne_rute[-1][1]
+    predhodna_ruta_sa_H_vece_od_0 = ()
+    for ruta in potencijalne_rute[:-1]:
+        preklapaju_se, broj_zajednickih_linkova = proveri_da_li_rute_sadrze_iste_cvorove(ruta_sa_kojom_se_poredi_bez_fs,
+                                                                                        ruta)
+        if preklapaju_se is True:
+            G = 1 # promeni ovo posle
+            len_ruta = len(ruta)
+            H = Racunaj_H(G,
+                          broj_zajednickih_linkova,
+                          len_ruta,
+                          len_of_ruta_sa_kojom_se_poredi_bez_fs,
+                          fs_potencijalne_rute)
+            if H>0:
+                if predhodna_ruta_sa_H_vece_od_0[1] < H:
+                    predhodna_ruta_sa_H_vece_od_0 = (ruta, H)
+                elif predhodna_ruta_sa_H_vece_od_0[1] == H:
+                    # biraj kracu rutu
+                    if len(predhodna_ruta_sa_H_vece_od_0[0])>len_ruta:
+                        predhodna_ruta_sa_H_vece_od_0 = (ruta, H)
+        
+    ruta_sa_najvecim_H = predhodna_ruta_sa_H_vece_od_0
+    
+    return ruta_sa_najvecim_H
+            
+        
+        
+
+    # iF je h veca od nule soritaj od najmanje ka najvecoj 
+    # sve sto su posle i uzmi prvih n tako da zbir
+    # fs ne predje U, kapacitet tranzistora   \
+    
+    # Kada se popunjava matrica popunjenosti krace rute stavljati desno
+    # na taj nacin ce one prve da se zavrse i tako nece biti praznih slotova
+    
+
+def trazi_sve_preklapajuce_rute_medju_requestovima_sa_istim_pocetnim_cvorom(requestove_sa_istim_pocetnim_cvorom):
+    # Moras i indexe ovde da prosledis posto ukoliko ne postoji ruta koja se preklapa 
+    # ili ako je h < 0 da bi je vratio u listu indeksi_requstova_koji_su_ostali
+    Graph = nx.from_numpy_matrix(matrica_linkova, create_using=nx.MultiDiGraph())
+    broj_pcele_i_najduza_ruta_i_sve_njene_podrute_list = []
+    najduza_ruta = 0
+    mozda_najduza_ruta = []
+    lista_potencijalnih_ruta_i_fs_vrednosti = []
+    # request_za_koji_se_traze_preklapajuce_rute
+    pocetni_cvor, terminalni_cvor, fs = requestove_sa_istim_pocetnim_cvorom[0]
+    # uzmi najkracu rutu
+    ruta_sa_kojom_se_poredi = min(all_paths(Graph,pocetni_cvor, terminalni_cvor),key = lambda x: len(x))
+    ruta_sa_kojom_se_poredi.append(("fs_vrednost",fs))
+    
+    for ruta in requestove_sa_istim_pocetnim_cvorom[1:]: 
+       #print('ruta je ', ruta)
+       pocetni_cvor, terminalni_cvor, fs = ruta 
+       potencijalne_rute = all_paths(Graph,pocetni_cvor, terminalni_cvor)
+       potencijalne_rute.append(("fs_vrednost",fs))
+       ruta_sa_najvecim_H = ako_se_praklapaju_racunaj_h(ruta_sa_kojom_se_poredi,
+                                                        potencijalne_rute)
+       
+       # ovde dodaj kapacitet provodnika U i nekako sredi indeksi_requstova_koji_su_ostali ako pretekne preko 
+       
+       #print('potencijalne_rute_i_fs_vrednost su ', potencijalne_rute_i_fs_vrednost)
+       lista_potencijalnih_ruta_i_fs_vrednosti.append(potencijalne_rute)
+
+
+
+
+def uzmi_n_requsteova_sa_pocekta_pcele(n_broj_requstova = 3, pcela):
+    requestovi = [pcela[i] for i in range(n_broj_requstova)]
+    # za svaki od 3 requesta pronadji redom koji requstovi iz ostatka pcele sadrze
+    # zajednicki pocetni c vor 
+    ostatak_requestova = pcela[n_broj_requstova:]
+    for pocetni_request in range(n_broj_requestova):
+        pocetni_request = pcela[i]
+        # nadji_requestove_sa_istim_pocetnim_cvorom_u_pceli
+        requestove_sa_istim_pocetnim_cvorom, indeksi_requstova_koji_su_ostali = nadji_requestove_sa_istim_pocetnim_cvorom_u_pceli(pocetni_request,
+                                                                                                                                  ostatak_requestova)
+        
+        ostatak_requestova = pcela[indeksi_requstova_koji_su_ostali]
+        # nadji_sve_moguce_ruta_na_osnovu_kojih_se_moze_resiti_request
+        paths = all_paths(Graph,3,4)
+        
+        
+        # racunaj H ovde
+        
+    
+
 # korak 2.1 ce se rekurzivno zvati sa lista_pcela_posle_brisanja_ruta dok se ne obrise cela pcela 
 
 Korak_2_1(info_pcela)  
 
 
-def Korak_3(rute_za_preracuvanje, matrica_ruta):
+def Korak_3(rute_za_preracuvanje, matrica_linkova):
     
-    Graph = nx.from_numpy_matrix(matrica_ruta, create_using=nx.MultiDiGraph())
+    Graph = nx.from_numpy_matrix(matrica_linkova, create_using=nx.MultiDiGraph())
     broj_pcele_i_najduza_ruta_i_sve_njene_podrute_list = []
     for broj_pcele, rute_sa_istim_pocetkom in enumerate(rute_za_preracuvanje):
         najduza_ruta = 0
@@ -177,7 +339,7 @@ def Korak_3(rute_za_preracuvanje, matrica_ruta):
                potencijalne_rute.append(("fs_vrednost",fs))
                #print('potencijalne_rute_i_fs_vrednost su ', potencijalne_rute_i_fs_vrednost)
                lista_potencijalnih_ruta_i_fs_vrednosti.append(potencijalne_rute)
-               mozda_najduza_ruta == max(potencijalne_rute,key=len)
+               mozda_najduza_ruta = max(potencijalne_rute,key=len)
                if najduza_ruta == 0:
                    najduza_ruta = max(potencijalne_rute,key=len)
                
@@ -251,14 +413,15 @@ def Korak_4(broj_pcele_i_najduza_ruta_i_sve_njene_podrute, zastitni_opseg):
 
 
 
-info_pcela = Korak_1(5,matrica_povezanosti)
+info_pcela = Korak_1_pravljenje_pcele_sa_izmesanim_rutama(broj_pcela = 5,
+                                                          matrica_povezanosti = matrica_povezanosti)
 lista_pcela = info_pcela.lista_pcela
 broj_pcela = info_pcela.broj_pcela
 print(broj_pcela, lista_pcela)
 
 rute_za_preracuvanje, lista_pcela_posle_brisanja_ruta = Korak_2_1(info_pcela) 
 
-broj_pcele_i_najduza_ruta_i_sve_njene_podrute_list = Korak_3(rute_za_preracuvanje, matrica_ruta)
+broj_pcele_i_najduza_ruta_i_sve_njene_podrute_list = Korak_3(rute_za_preracuvanje, matrica_linkova)
 
 
 broj_pcele_i_najduza_ruta_i_sve_njene_podrute = copy.deepcopy(list(broj_pcele_i_najduza_ruta_i_sve_njene_podrute_list[0]))
@@ -301,7 +464,7 @@ def walking(ruta):
     first,second, *_ = ruta[0]
     
 
-a = Korak_1(5,matrica_povezanosti)
+a = Korak_1_pravljenje_pcele_sa_izmesanim_rutama(5,matrica_povezanosti)
 a, b = lista_pcela
 [ruta for pcela in lista_pcela for ruta in pcela if pcela[0][0]== ruta[0]  ]
  
@@ -323,8 +486,8 @@ def letter_count(letters, target):
 #
 #class bee():
 #    
-#    def __init__(self,matrica_ruta, matrica_povezanosti):
-#        self.matrica_ruta = matrica_ruta
+#    def __init__(self,matrica_linkova, matrica_povezanosti):
+#        self.matrica_linkova = matrica_linkova
 #        self.matrica_povezanosti = matrica_povezanosti
 #        
 #    
