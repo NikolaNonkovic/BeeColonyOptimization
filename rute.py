@@ -54,7 +54,10 @@ dimenzija_kvadratne_matrice = len(matrica_linkova)
 
 # za slucaj da je potrebno samo dati maticu zahteva i matricu linkova
 # zato postoje ove dve funcije napravi_matricu_zahteva napravi_matricu_povezanosti_od_matrice_zahteva
-def napravi_matricu(donja_granica,gornja_granica, dimenzija_kvadratne_matrice, dijagola_nule =False):
+def napravi_matricu(donja_granica,
+                    gornja_granica, 
+                    dimenzija_kvadratne_matrice, 
+                    dijagola_nule =False):
     rows = dimenzija_kvadratne_matrice
     columns = dimenzija_kvadratne_matrice
     matrica = np.array([[random.randrange(donja_granica, gornja_granica+1) 
@@ -109,14 +112,13 @@ def Korak_1_pravljenje_pcele_sa_izmesanim_rutama(broj_pcela, matrica_povezanosti
     #svaki red u matrici povezanosti je jenda ruta, sto znaci da je pcela matrica povezanosti -->samo suffle
     lista_pcela = []
     matrica_povezanosti_copy = np.copy(matrica_povezanosti)
-    info_pcela = namedtuple("info_pcela", 'lista_pcela, broj_pcela')
+    info_pcela_tup = namedtuple("info_pcela", 'lista_pcela, broj_pcela')
     
     for i in range(broj_pcela):
         np.random.shuffle(matrica_povezanosti_copy) #permute rows 
         matrica_povezanosti_shuffled = np.copy(matrica_povezanosti_copy) 
         lista_pcela.append(matrica_povezanosti_shuffled) 
-    info_pcela.broj_pcela = broj_pcela
-    info_pcela.lista_pcela = lista_pcela
+    info_pcela = info_pcela_tup(lista_pcela,broj_pcela)
     
     return info_pcela
 
@@ -290,28 +292,32 @@ def trazi_sve_preklapajuce_rute_medju_requestovima_sa_istim_pocetnim_cvorom(inde
     lista_odabranih_ruta_i_fs_vrednosti.append(ruta_sa_kojom_se_poredi)
     
     for index,ruta in enumerate(requestove_sa_istim_pocetnim_cvorom[1:]): 
-       #print('ruta je ', ruta)
-       pocetni_cvor, terminalni_cvor, fs = ruta 
-       potencijalne_rute = all_paths(Graph,pocetni_cvor, terminalni_cvor)
-       potencijalne_rute.append(("fs_vrednost",fs))
-       ruta_sa_najvecim_H = ako_se_praklapaju_racunaj_h(ruta_sa_kojom_se_poredi,
+        #print('ruta je ', ruta)
+        pocetni_cvor, terminalni_cvor, fs = ruta 
+        potencijalne_rute = all_paths(Graph,pocetni_cvor, terminalni_cvor)
+        potencijalne_rute.append(("fs_vrednost",fs))
+        ruta_sa_najvecim_H = ako_se_praklapaju_racunaj_h(ruta_sa_kojom_se_poredi,
                                                         potencijalne_rute)
        
-       # ovde dodaj kapacitet provodnika U i nekako sredi indeksi_requstova_koji_su_ostali ako pretekne preko 
+        # ovde dodaj kapacitet provodnika U i nekako sredi indeksi_requstova_koji_su_ostali ako pretekne preko 
 
-       H = ruta_sa_najvecim_H[1]
-       if H > 0:
-           #ako je vece od nule dodaj za transmisiju
-           if kapacitet_transmitera + H < KAPACITET_TRANSMITERA:
-               kapacitet_transmitera += H
-               lista_odabranih_ruta_i_fs_vrednosti.append([ruta_sa_najvecim_H[0],("fs_vrednost",fs)])
+        H = ruta_sa_najvecim_H[1]
+        if H > 0:
+            #ako je vece od nule dodaj za transmisiju
+            if kapacitet_transmitera + H < KAPACITET_TRANSMITERA:
+                kapacitet_transmitera += H
+                lista_odabranih_ruta_i_fs_vrednosti.append([ruta_sa_najvecim_H[0],("fs_vrednost",fs)])
             else:
                 indeksi_requstova_koji_su_ostali.append(indeksi_requstova_koji_su_uzeti[index])
         else:
             indeksi_requstova_koji_su_ostali.append(indeksi_requstova_koji_su_uzeti[index])
                
        
-       return lista_odabranih_ruta_i_fs_vrednosti, indeksi_requstova_koji_su_ostali
+    # menjanje rute sa kojim se poredi da bude lista sa dva elementa, negde sam zajebao pa je ovo q&d 
+    lista_odabranih_ruta_i_fs_vrednosti[0] = [lista_odabranih_ruta_i_fs_vrednosti[0][:-1], lista_odabranih_ruta_i_fs_vrednosti[0][-1]]
+    
+    
+    return lista_odabranih_ruta_i_fs_vrednosti, indeksi_requstova_koji_su_ostali
        
 
 
@@ -359,30 +365,71 @@ def napravi_matricu_slotova(matrica_linkova):
     return matrica_slotova_as_dict
 
 
-def racunaj_startu_poziciju_za_popunjavanje_matrice(rute):
+def racunaj_startu_poziciju_za_popunjavanje_matrice(rute, matrica_slotova_as_dict):
     startna_pozicija_za_popunjavanje_matrice_slotova = 0
-    for ruta in rute:
+    for ruta_i_fs in rute:
+        ruta = ruta_i_fs[0]
         len_of_ruta = len(ruta)
         for i in range(len_of_ruta):
-            if i != len_of_ruta:
-            link_izmedju_cvorova = "_".join([str(cvor) for cvor in ruta[i:i+1]])
-            broj_slobodnog_slota_na_linku = matrica_slotova_as_dict[link_izmedju_cvorova][-1] 
+            if i != len_of_ruta-1:
+                link_izmedju_cvorova = "_".join([str(cvor) for cvor in ruta[i:i+2]])
+                broj_slobodnog_slota_na_linku = matrica_slotova_as_dict[link_izmedju_cvorova][-1] 
             if broj_slobodnog_slota_na_linku > startna_pozicija_za_popunjavanje_matrice_slotova:
                 startna_pozicija_za_popunjavanje_matrice_slotova = broj_slobodnog_slota_na_linku
                 
-
     return startna_pozicija_za_popunjavanje_matrice_slotova
 
 
+def izbaci_rute_koji_imaju_zauzete_linkove_koje_ruta_za_porednjenje_ne_sadrzi(matrica_slotova_as_dict,
+                                                                              ruta_za_porednjenje,
+                                                                              rute):
+    startna_pozicija_za_popunjavanje_matrice_slotova = racunaj_startu_poziciju_za_popunjavanje_matrice([ruta_za_porednjenje], matrica_slotova_as_dict)
+    # posto me zanima broj slota bez zadnjeg granicnika ZASTITNI_OPSEG
+    zbir_fs = ZASTITNI_OPSEG + startna_pozicija_za_popunjavanje_matrice_slotova + 1
+    rute_koje_imaju_slobodne_slotove = []
+    rute_koje_imaju_slobodne_slotove.append(ruta_za_porednjenje)
+    for index,cvorovi_i_fs in enumerate(rute):
+        zadrzi_rutu = True
+        cvorovi, fs = cvorovi_i_fs
+        len_cvorovi = len(cvorovi)
+        for index_cvor,cvor in enumerate(cvorovi):
+            if cvor not in cvorovi_rute_za_porednjenje:
+                
+                #vrati broj slota
+                link_izmedju_cvorova_list = []
+                if len_cvorovi == index_cvor:
+                   link_izmedju_cvorova_list.append("_".join([str(cvorovi[index_cvor-1]),str(cvor)]))
+                
+                else:
+                    # cvor koji ruta za porednjenje ne sadrzi nije na kraju 
+                    # OVO MOZDA BUDE MORALO DA SE MENJA JER MOZE POSTOJIATI SLUCAJ kada svaki link izmedju dva cvora je slobodan ali je umetnuto vise linkova pa se svi moraju uzeti u obzir
+                    link_izmedju_cvorova_list.append("_".join([str(cvorovi[index_cvor-1]),str(cvor)]),
+                                                     "_".join([str(cvor),str(cvorovi[index_cvor+1])]))
+                
+                for link_izmedju_cvorova in link_izmedju_cvorova_list:
+                    if matrica_slotova_as_dict[link_izmedju_cvorova][-1] > zbir_fs:
+                        zadrzi_rutu = False
+                    
+        if zadrzi_rutu is True:
+           rute_koje_imaju_slobodne_slotove.append(cvorovi_i_fs) 
+           zbir_fs += fs[1]
+    
+    return rute_koje_imaju_slobodne_slotove
+    
+
 def Popunjavanje_matrice_slotova(lista_odabranih_ruta_i_fs_vrednosti,matrica_slotova):
-    prva_ruta= lista_odabranih_ruta_i_fs_vrednosti[0]
-    len_prva_ruta = len(prva_ruta)
+    ruta_za_porednjenje = lista_odabranih_ruta_i_fs_vrednosti[0]
+    len_prva_ruta = len(prva_ruta[0])
     rute_za_grupisanje = lista_odabranih_ruta_i_fs_vrednosti[1:]
-    rute_za_grupisanje_sortirane_od_najvece_ka_najmanjoj = sorted(rute_za_grupisanje,key = lambda x: len(x), reverse= True)
+    rute_za_grupisanje_sortirane_od_najvece_ka_najmanjoj = sorted(rute_za_grupisanje,key = lambda x: len(x[0]), reverse= True)
     
-    rute = [prva_ruta,*rute_za_grupisanje_sortirane_od_najvece_ka_najmanjoj]
+    rute = rute_za_grupisanje_sortirane_od_najvece_ka_najmanjoj
     
-        
+    rute_koje_imaju_slobodne_slotove = izbaci_rute_koji_imaju_zauzete_linkove_koje_ruta_za_porednjenje_ne_sadrzi(matrica_slotova_as_dict,
+                                                                                                                 ruta_za_porednjenje,
+                                                                                                                 rute_za_grupisanje_sortirane_od_najvece_ka_najmanjoj)
+    
+    
     startna_pozicija_za_popunjavanje_matrice_slotova = racunaj_startu_poziciju_za_popunjavanje_matrice(rute)
             
     
