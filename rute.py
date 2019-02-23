@@ -10,6 +10,8 @@ import math
 import random
 import copy
 from itertools import zip_longest
+import math
+import random
 
 
 ZASTITNI_OPSEG = 1
@@ -112,75 +114,25 @@ def Korak_1_pravljenje_pcele_sa_izmesanim_rutama(broj_pcela, matrica_povezanosti
     #svaki red u matrici povezanosti je jenda ruta, sto znaci da je pcela matrica povezanosti -->samo suffle
     lista_pcela = []
     matrica_povezanosti_copy = np.copy(matrica_povezanosti)
-    info_pcela_tup = namedtuple("info_pcela", 'lista_pcela, broj_pcela')
+    trenutni_fs = 0
+    matrica_slotova = []
+    matrica_slotova = napravi_matricu_slotova(matrica_linkova)
+    pcela_parcijalno_resenje_tup = namedtuple("pcela_parcijalno_resenje", "rute, trenutni_fs, matrica_slotova")
+    
     
     for i in range(broj_pcela):
         np.random.shuffle(matrica_povezanosti_copy) #permute rows 
         matrica_povezanosti_shuffled = np.copy(matrica_povezanosti_copy) 
-        lista_pcela.append(matrica_povezanosti_shuffled) 
-    info_pcela = info_pcela_tup(lista_pcela,broj_pcela)
+        pcela = pcela_parcijalno_resenje_tup(matrica_povezanosti_shuffled,trenutni_fs,matrica_slotova)
+        lista_pcela.append(pcela) 
     
-    return info_pcela
+    return lista_pcela
 
 
-def Korak_2(info_pcela):
-    
-    lista_pcela = info_pcela.lista_pcela
-    broj_pcela = info_pcela.broj_pcela
-    lista_pcela_kopija = list(lista_pcela)
-    lista_pcela_kopija = [pcela.tolist() for pcela in lista_pcela_kopija] 
-    dict_pcela = {}
-    lista_pcela_posle_brisanja_ruta = []
-    nova_pcela = []
-    
-    for i in range(broj_pcela):
-        key = "pcela_broj_{i}".format(i=i)
-        dict_pcela[key] = [] 
-    print(dict_pcela)
-    
-    for index, pcela in enumerate(lista_pcela_kopija):
-        for broj_pcela, ruta in enumerate(pcela):
-            if pcela[0][0]== ruta[0]:
-                dict_pcela["pcela_broj_{i}".format(i=index)].append(ruta)
-            else: 
-                nova_pcela.append(ruta)
-        lista_pcela_posle_brisanja_ruta.append(nova_pcela)
-        nova_pcela = []
-    
-    return (dict_pcela, lista_pcela_posle_brisanja_ruta) # za ovaj deo cu takodje morati da proveravam u matrici ruta na koji sve nacin se moze doci iz pocetnog do kranjeg cvora
-  
-def Korak_2_1(info_pcela):
-    
-    lista_pcela = info_pcela.lista_pcela
-    broj_pcela = info_pcela.broj_pcela
-    lista_pcela_kopija = list(lista_pcela)
-    lista_pcela_kopija = [pcela.tolist() for pcela in lista_pcela_kopija] 
-    rute_za_preracuvanje = []
-    lista_pcela_posle_brisanja_ruta = []
-    nova_pcela = []
-    
-    for i in range(broj_pcela):
-        rute_za_preracuvanje.append([i])
-    
-    for index, lista_requestova_u_pceli in enumerate(lista_pcela_kopija):
-        for request_num, request in enumerate(lista_requestova_u_pceli):
-            if lista_requestova_u_pceli[0][0]== request[0]:
-                # skida prvu rutu sa pcele i stavlja je u dict koje se zove
-                # ruta_za_preracuvanje gde za svaku se skida po jedna ruta
-                rute_za_preracuvanje[index].append(request)
-            else: 
-                nova_pcela.append(request)
-        lista_pcela_posle_brisanja_ruta.append(nova_pcela)
-        nova_pcela = []
-    
-    
-    return (rute_za_preracuvanje, lista_pcela_posle_brisanja_ruta)
-
-
-info_pcela = Korak_1_pravljenje_pcele_sa_izmesanim_rutama(broj_pcela = 5,
+lista_pcela = Korak_1_pravljenje_pcele_sa_izmesanim_rutama(broj_pcela = 5,
                                                           matrica_povezanosti = matrica_povezanosti)
 
-pcela = info_pcela.lista_pcela[0]
+pcela = lista_pcela[0].rute
 
 def nadji_requestove_sa_istim_pocetnim_cvorom_u_pceli(pocetni_request,
                                                       ostatak_requestova):
@@ -343,19 +295,13 @@ def uzmi_n_requsteova_sa_pocekta_pcele(pcela,matrica_slotova):
         matrica_slotova_as_dict
         
         
-        
-        
-        
-        
-        
-        
-        
-        
-        # nadji_sve_moguce_ruta_na_osnovu_kojih_se_moze_resiti_request
-        paths = all_paths(Graph,3,4)
-        
-        
-        # racunaj H ovde
+    # ovde treba da se izracuna FS za dato grupisanje
+    pcela_parcijalno_resenje_tup = namedtuple("pcela_parcijalno_resenje", "rute, trenutni_fs, matrica_slotova")
+    return pcela_parcijalno_resenje_tup(ostatak_requestova,
+                                        trenutni_fs,
+                                        matrica_slotova)
+    
+
         
     
 def napravi_matricu_slotova(matrica_linkova):
@@ -463,12 +409,71 @@ def Popunjavanje_matrice_slotova(lista_odabranih_ruta_i_fs_vrednosti,matrica_slo
             
     
     
+def racunaj_verovatnoce(pcela_parcijalno_resenje,
+                          fs_min,
+                          fs_max,
+                          random_rud,
+                          ob_sum_recruter):
     
+    fb = pcela_parcijalno_resenje.trenutni_fs
+    ob = (fs_max-fb)/(fs_max-fs_min)
+    pb_loyal = 1-math.log10((1+(1-ob)))
     
-    
-    
+    is_follower = True if pb_loyal <= random_rud else False
 
+    if is_follower is False:
+        ob_sum_recruter += ob
+    
+    return ob_sum_recruter, {"pcela_parcijalno_resenje":pcela_parcijalno_resenje,
+                                "ob":ob,
+                                "pb_loyal":pb_loyal,
+                                "is_follower":is_follower}
+    
+def Poredi_pcele(pcele_parcijalna_resenja)    
+    
+    random_rud = random.uniform(0, 1)
 
+    pcele_parcijalno_resenje_sa_verovatnocama = []
+    ob_sum_recruter = 0
+    fs_min = min(key = lambda pcela: pcela.trenutni_fs)
+    fs_max = max(key = lambda pcela: pcela.trenutni_fs)
+    
+    for pcela_parcijalno_resenje in pcele_parcijalna_resenja:
+        ob_sum_recruter, pcela_sa_verovatnocama  = racunaj_verovatnoce(pcela_parcijalno_resenje,
+                                                 fs_min,
+                                                 fs_max,
+                                                 random_rud,
+                                                 ob_sum_recruter)
+        pcela_parcijalno_resenje_sa_verovatnocama.append(pcela_sa_verovatnocama)
+        
+
+    lista_pcela_posle_follow_recruter_faze = regrutacija_pcela(pcela_parcijalno_resenje_sa_verovatnocama,
+                                                               ob_sum_recruter)
+
+def regrutacija_pcela(pcela_parcijalno_resenje_sa_verovatnocama,ob_sum_recruter):
+    
+    verovatnoca_regruteri = [(index_rekrutera ,pcela_i_verovatnoce["ob"]/ob_sum_recruter) 
+                                  for index_rekrutera, pcela_i_verovatnoce in enumerate(pcela_parcijalno_resenje_sa_verovatnocama) 
+                                      if pcela_i_verovatnoce["is_follower"] is False].sort(key= lambda x: x[1])
+    
+    lista_pcela_posle_follow_recruter_faze = []
+    
+    for pcela_i_verovatnoce in pcela_parcijalno_resenje_sa_verovatnocama:
+        if pcela_i_verovatnoce["is_follower"] is True:
+            random_broj_follower = random.uniform(0, 1)
+            for verovatnoca_regruter in verovatnoca_regruteri:
+                if random_broj_follower <= verovatnoca_regruter[1]:
+                   kopija_pcele = copy.deepcopy(pcela_parcijalno_resenje_sa_verovatnocama[verovatnoca_regruter[0]])
+                   lista_pcela_posle_follow_recruter_faze.append(kopija_pcele["pcela_parcijalno_resenje"])
+                   
+        else:
+            lista_pcela_posle_follow_recruter_faze.append(pcela_i_verovatnoce["pcela_parcijalno_resenje"])
+            
+                    
+    return lista_pcela_posle_follow_recruter_faze
+
+        
+    
 
 # korak 2.1 ce se rekurzivno zvati sa lista_pcela_posle_brisanja_ruta dok se ne obrise cela pcela 
 
