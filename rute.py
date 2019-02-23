@@ -160,6 +160,9 @@ def Racunaj_H(G,X,Y,Z,W):
     
 def proveri_da_li_rute_sadrze_iste_cvorove(ruta_1, ruta_2):
     
+    
+    # [2,4,1,3] i [2,4,1,2] bice False, ovaj slucaj je izbacen jer ga je tesko isprogramirati
+    
     len_of_ruta_2 = len(ruta_2)
     index_na_kome_je_predhodni_match = -1
     # broj zajednckih linkova je -1 posto su potrebna dva uzastopna match-a jesu link
@@ -236,7 +239,7 @@ def trazi_sve_preklapajuce_rute_medju_requestovima_sa_istim_pocetnim_cvorom(inde
     lista_odabranih_ruta_i_fs_vrednosti = []
     # request_za_koji_se_traze_preklapajuce_rute
     pocetni_cvor, terminalni_cvor, fs = requestove_sa_istim_pocetnim_cvorom[0]
-    # uzmi najkracu rutu
+    # uzmi najkracu rutu OVO MENJAJ NAJVEROVATNIJE!!!!!!!!!!!!!!!!!!!!!!
     ruta_sa_kojom_se_poredi = min(all_paths(Graph,pocetni_cvor, terminalni_cvor),key = lambda x: len(x))
     ruta_sa_kojom_se_poredi.append(("fs_vrednost",fs))
     lista_odabranih_ruta_i_fs_vrednosti.append(ruta_sa_kojom_se_poredi)
@@ -295,13 +298,14 @@ def uzmi_n_requsteova_sa_pocekta_pcele(pcela):
         
         
     pcela.rute = ostatak_requestova
-    pcela.trenutni_fs = trenutni_fs
+    pcela.trenutni_fs = racunaj_sumu_trenutnog_fs(pcela.matrica_slotova)
         
-        
-    # ovde treba da se izracuna FS za dato grupisanje
     return pcela
     
 
+def racunaj_sumu_trenutnog_fs(matrica_slotova):
+    # +1 zato sto ako je vrednost '4_5': [0, 2] znaci da su popunjenji slotovi 0,1,2
+    return sum(value[-1]+1 for value in matrica_slotova.values() if value[-1] != 0)
         
     
 def napravi_matricu_slotova(matrica_linkova):
@@ -311,53 +315,58 @@ def napravi_matricu_slotova(matrica_linkova):
     return matrica_slotova_as_dict
 
 
-def Popunjavanje_matrice_slotova(lista_odabranih_ruta_i_fs_vrednosti,matrica_slotova):
+def popunjavanje_matrice_slotova(lista_odabranih_ruta_i_fs_vrednosti,matrica_slotova):
     ruta_za_porednjenje = lista_odabranih_ruta_i_fs_vrednosti[0]
-    len_prva_ruta = len(ruta_za_porednjenje[0])
     rute_za_grupisanje = lista_odabranih_ruta_i_fs_vrednosti[1:]
     rute_za_grupisanje_sortirane_od_najvece_ka_najmanjoj = sorted(rute_za_grupisanje,key = lambda x: len(x[0]), 
                                                                   reverse= True)
     
-    rute = rute_za_grupisanje_sortirane_od_najvece_ka_najmanjoj
     
     rute_koje_imaju_slobodne_slotove = izbaci_rute_koji_imaju_zauzete_linkove_koje_ruta_za_porednjenje_ne_sadrzi(matrica_slotova,
                                                                                                                  ruta_za_porednjenje,
                                                                                                                  rute_za_grupisanje_sortirane_od_najvece_ka_najmanjoj)
+    rute_koje_imaju_slobodne_slotove.sort(key = lambda x: len(x[0]),reverse= True)
+  
     
+    zbir_svih_fs = sum(ruta[-1][1] for ruta in rute_koje_imaju_slobodne_slotove)
+    rute_koje_imaju_slobodne_slotove_sa_zero_pading = copy.deepcopy(rute_koje_imaju_slobodne_slotove)
     
+    duzina_najduze_rute = len(rute_koje_imaju_slobodne_slotove[0][0])
+    for ruta in rute_koje_imaju_slobodne_slotove_sa_zero_pading:
+        zero_pading(ruta[0],duzina_najduze_rute)
     
-    
-    startna_pozicija_za_popunjavanje_matrice_slotova = racunaj_startu_poziciju_za_popunjavanje_matrice(rute)
+    for broj_koraka in range(1,duzina_najduze_rute):
+        for ruta_i_fs in rute_koje_imaju_slobodne_slotove_sa_zero_pading:
             
+            if broj_koraka == 1:
+                fs = ruta_i_fs[-1][1]
+                ruta = ruta_i_fs[0]
+                prvi_cvor = ruta[0]
+                drugi_cvor = ruta[1]
+                link = "_".join([str(prvi_cvor),str(drugi_cvor)])
+                zbirni_fs_po_linku = zbir_svih_fs 
+                
+            else:
+                fs = ruta_i_fs[-1][1]
+                ruta = ruta_i_fs[0]
+                prvi_cvor = ruta[broj_koraka-1]
+                drugi_cvor = ruta[broj_koraka]
+                print(ruta, prvi_cvor, drugi_cvor)
+                if prvi_cvor != 0 and drugi_cvor != 0:
+                    link = "_".join([str(prvi_cvor),str(drugi_cvor)])
+                    zbirni_fs_po_linku += fs
+                
+        zbirni_fs_po_linku_i_zastigni_opseg = ZASTITNI_OPSEG + zbirni_fs_po_linku + ZASTITNI_OPSEG - 1 # posto je zero based array
+        matrica_slotova[link].append(matrica_slotova[link][-1] + zbirni_fs_po_linku_i_zastigni_opseg) 
+        zbirni_fs_po_linku = 0
     
-    # popuni matiricu bez pretpostavke umetnutih cvorova, ali radi sa rutama koje su duze po pocetne i sve cvorovi se preklapaju
-    len_of_ruta = len(prva_ruta)
-    rute_za_grupisanje_sortirane_od_najvece_ka_najmanjoj_copy = copy.deepcopy(rute_za_grupisanje_sortirane_od_najvece_ka_najmanjoj)
+    return matrica_slotova
     
+
     
-    zbir_svih_fs = startna_pozicija_za_popunjavanje_matrice_slotova + 1 + 2*ZASTITNI_OPSEG + sum(ruta[-1][1] for ruta in rute)
-    
-   # minus 2 je posto kad ostane jedan link na najduzoj ruti, tad se zavrsava
-   for broj_koraka in range(len(max(rute,key=len))-2): 
-       zbir_svih_fs_po_koraku = copy.deepcopy(zbir_svih_fs) 
-       ############ VIDI KAKO DA KADA SE OBRISE POCETNA RUTA IPAK RACUNAS RUPU KOJA OSTANE LEVO ZBOG NJE
-               #ostala je samo fs vrednost kao tuple u listi
-               fs = ruta[0][1]
-               zbir_svih_fs_po_koraku -= fs                 
-               
-            if len(ruta)==3:
-                #skidaj oba cvora ako je ostao samo jedan link i fs vrednost
-                prvi_cvor = ruta.pop(0)
-                drugi_cvor = ruta.pop(0)
-            
-            if len(ruta)>3:
-                prvi_cvor = ruta.pop(0)
-                drugi_cvor = ruta[0]
-                    
-        link_izmedju_cvorova = "_".join([str(prvi_cvor),str(drugi_cvor)])
-        matrica_slotova[link_izmedju_cvorova].append(zbir_svih_fs_po_koraku) 
-            
-            
+def zero_pading(list_for_transformation,len_of_list_after_pading):
+    list_for_transformation.extend([0] * (len_of_list_after_pading - len(list_for_transformation)))
+    return None    
 
 def racunaj_startu_poziciju_za_popunjavanje_matrice(rute, matrica_slotova_as_dict):
     startna_pozicija_za_popunjavanje_matrice_slotova = 0
@@ -432,11 +441,11 @@ def racunaj_verovatnoce(pcela_parcijalno_resenje,
                                 "pb_loyal":pb_loyal,
                                 "is_follower":is_follower}
     
-def Poredi_pcele(pcele_parcijalna_resenja)    
+def poredi_pcele(pcele_parcijalna_resenja):
     
     random_rud = random.uniform(0, 1)
 
-    pcele_parcijalno_resenje_sa_verovatnocama = []
+    pcela_parcijalno_resenje_sa_verovatnocama = []
     ob_sum_recruter = 0
     fs_min = min(key = lambda pcela: pcela.trenutni_fs)
     fs_max = max(key = lambda pcela: pcela.trenutni_fs)
@@ -452,6 +461,8 @@ def Poredi_pcele(pcele_parcijalna_resenja)
 
     lista_pcela_posle_follow_recruter_faze = regrutacija_pcela(pcela_parcijalno_resenje_sa_verovatnocama,
                                                                ob_sum_recruter)
+    
+    
 
 def regrutacija_pcela(pcela_parcijalno_resenje_sa_verovatnocama,ob_sum_recruter):
     
@@ -477,7 +488,7 @@ def regrutacija_pcela(pcela_parcijalno_resenje_sa_verovatnocama,ob_sum_recruter)
 
         
 
-def main()
+def main():
 
     pcela_parcijalno_resenje_tup = namedtuple("pcela_parcijalno_resenje", "rute, trenutni_fs, matrica_slotova")
 
@@ -501,3 +512,8 @@ def main()
 
 if __name__ == '__main__':
     main()
+
+
+
+
+# rute_koje_imaju_slobodne_slotove_cuvanje
