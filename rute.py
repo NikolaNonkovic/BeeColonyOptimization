@@ -3,38 +3,74 @@
 import argparse
 import numpy as np
 from numpy import genfromtxt
-from collections import namedtuple
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import networkx as nx
 import math
 import random
 import copy
 import time
 
-
 ZASTITNI_OPSEG = 1
 KAPACITET_TRANSMITERA = 8
 BROJ_REQUESTOVA_ZA_RAZMATRANJE_PO_ITERACIJI_PO_PCELI = 3
 BROJ_RUTA_K = 3
-BROJ_ITERACIJA = 100
+BROJ_ITERACIJA = 100 
+
 
 def parsing_argumts():
-    # parsing arguments
-    parser = argparse.ArgumentParser(description='')
-    parser.add_argument('matrica_linkova', help='Ime fajla za matricu linkova u .csv file formatu ')
-    parser.add_argument('broj_pcela', help='Broj pcela za siulaciju')
-    parser.add_argument('min_slot', help='minimalni broj slotova prilikog generisanja matrice povezanosti')
-    parser.add_argument('max_slot', help='maksimalan broj slotova prilikog generisanja matrice povezanosti')
-    parser.add_argument('max_slot', help='maksimalan broj slotova prilikog generisanja matrice povezanosti')
+    
+    global ZASTITNI_OPSEG,KAPACITET_TRANSMITERA, BROJ_REQUESTOVA_ZA_RAZMATRANJE_PO_ITERACIJI_PO_PCELI,BROJ_RUTA_K, BROJ_ITERACIJA
+    ZASTITNI_OPSEG = 1
+    KAPACITET_TRANSMITERA = 8
+    BROJ_REQUESTOVA_ZA_RAZMATRANJE_PO_ITERACIJI_PO_PCELI = 3
+    BROJ_RUTA_K = 3
+    BROJ_ITERACIJA = 100 
+    
+    parser = argparse.ArgumentParser(description='Algoritam za izracunavanja popunjenosti mreze slotova baziran na heuristici - optimizacija kolonijom pcela (BCO)')
+    
+    parser.add_argument('-m','--matrica_linkova', 
+                        help='Ime fajla za matricu linkova u .csv file formatu.',required=True, type=str)
+    
+    parser.add_argument('-b','--broj_pcela', 
+                        help='Broj pcela za simulaciju',required=True,type=int)
+    
+    parser.add_argument('-min','--min_slot', 
+                        help='minimalni broj slotova prilikog generisanja matrice povezanosti.',required=True,type=int)
+    
+    parser.add_argument('-max','--max_slot', 
+                        help='maksimalan broj slotova prilikog generisanja matrice povezanosti.',required=True,type=int)
+    
+    parser.add_argument('-u','--kapacitet_trasmitera', 
+                        help='Broj slotova koje mogu da zauzmu rute prilikom grupisannja.',default=KAPACITET_TRANSMITERA,type=int)
+    
+    parser.add_argument('-g','--zastitni_opseg', 
+                        help='Broj slotova koji se dodaje kao granicnik sa obe strane grupisanih ruta.',default=ZASTITNI_OPSEG,type=int)
+    
+    parser.add_argument('-nr','--broj_req', 
+                        help='Broj uzetih requestova za razmatranje prilikom grupisanja.',default = BROJ_REQUESTOVA_ZA_RAZMATRANJE_PO_ITERACIJI_PO_PCELI,type=int)
+    
+    parser.add_argument('-k','--broj_ruta', 
+                        help='Broj uzetih ruta za razmatranje prilikom grupisanja.',default = BROJ_RUTA_K,type=int)
+
+    parser.add_argument('-i','--broj_iteracija', 
+                        help='Broj iteracija nakog koga algoritam staje ukoliko ni jedan drugi kriterijum zaustavljanja nije ispunjen.',default = BROJ_ITERACIJA,type=int)
+
+
 
     args = parser.parse_args()
     matrica_linkova_file_name = args.matrica_linkova
-        broj_pcela = 5
-    dimenzija_kvadratne_matrice = 10
-    min_slot = 1
-    max_slot = 4
+    broj_pcela = args.broj_pcela
+    min_slot = args.min_slot
+    max_slot = args.max_slot
     
-    return matrica_linkova_file_name, matrica_povezanosti_file_name 
+    KAPACITET_TRANSMITERA = args.kapacitet_trasmitera
+    ZASTITNI_OPSEG = args.zastitni_opseg
+    BROJ_REQUESTOVA_ZA_RAZMATRANJE_PO_ITERACIJI_PO_PCELI = args.broj_req
+    BROJ_RUTA_K = args.broj_ruta
+    BROJ_ITERACIJA = args.broj_iteracija
+
+
+    return matrica_linkova_file_name, broj_pcela, min_slot, max_slot
 
 def load_matrices_from_files_names(matrica_linkova_file_name):
     
@@ -631,21 +667,19 @@ def regrutacija_pcela(pcela_parcijalno_resenje_sa_verovatnocama,ob_sum_recruter)
         
 
 def inicijalizacija(broj_pcela,
-                    dimenzija_kvadratne_matrice,
                     min_slot,
                     max_slot,
-                    matrica_linkova = None):
+                    matrica_linkova):
 
 
     # matrica_linkova, matrica_povezanosti = load_matrices_from_files_names("dummy1", "dummy2")
-    if matrica_linkova is None:
-        matrica_linkova = napravi_matricu(1, 1, dimenzija_kvadratne_matrice, dijagola_nule=True)
-        dimenzija_kvadratne_matrice = matrica_linkova.shape[0]
+    dimenzija_kvadratne_matrice = matrica_linkova.shape[0]
+        
     matrica_zahteva = napravi_matricu(min_slot, max_slot, dimenzija_kvadratne_matrice, dijagola_nule=True)
     matrica_povezanosti = napravi_matricu_povezanosti_od_matrice_zahteva(matrica_zahteva)
     
     Graph = nx.from_numpy_matrix(matrica_linkova, create_using=nx.MultiDiGraph())
-    Nacrtaj_graph(Graph)
+#    Nacrtaj_graph(Graph)
     lista_pcela = pravljenje_liste_pcela_sa_izmesanim_rutama(broj_pcela, 
                                                              matrica_povezanosti,
                                                              Graph)
@@ -667,15 +701,23 @@ def stop_kriterijum(lista_pcela):
     return all(True if pcela.rute.size == 0 else False for pcela in lista_pcela )
 
 def main():
-    broj_pcela = 5
-    dimenzija_kvadratne_matrice = 10
-    min_slot = 1
-    max_slot = 4
+
+    matrica_linkova_file_name, broj_pcela, min_slot, max_slot = parsing_argumts()
+    matrica_linkova = load_matrices_from_files_names(matrica_linkova_file_name)
     
-    matrica_linkova = load_matrices_from_files_names("14.csv")
+    print(f"matrica linkova ime fajla: '{matrica_linkova_file_name}'",
+          f"broj pcela: '{broj_pcela}'",
+          f"min slot: '{min_slot}'",
+          f"max slot: '{max_slot}'",
+          f"zastitni opseg: '{ZASTITNI_OPSEG}'",
+          f"kapacitet transmitera: '{KAPACITET_TRANSMITERA}'",
+          f"broj requestova za razmatranje po iteraciji po pceli: '{BROJ_REQUESTOVA_ZA_RAZMATRANJE_PO_ITERACIJI_PO_PCELI}'",
+          f"broj ruta k: '{BROJ_RUTA_K}'",
+          f"broj iteracija: '{BROJ_ITERACIJA}'",
+          sep = "\n")
+    
     start = time.time()
     Graph, lista_pcela = inicijalizacija(broj_pcela,
-                                         dimenzija_kvadratne_matrice,
                                          min_slot,
                                          max_slot,
                                          matrica_linkova)
@@ -699,10 +741,5 @@ def main():
            f"ukupan fs bez ustede : {trenutni_fs+ukupna_usteda}"], sep = "\n")
         
 
-#if __name__ == '__main__':
-#    main()
-
-
-#lista_odabranih_ruta_i_fs_vrednosti = [[[1, 2, 3], ('fs_vrednost', 2)],[[1, 2, 3, 4], ('fs_vrednost', 1)],[[1, 2], ('fs_vrednost', 3)]]
-
-#pcela_parcijalno_resenje_sa_verovatnocama[-1]["is_follower"] = True
+if __name__ == '__main__':
+    main()
