@@ -74,24 +74,13 @@ def parsing_argumts():
 
 def load_matrices_from_files_names(matrica_linkova_file_name):
     
-    ## hardcoded values for loading matrices
-#    matrica_linkova = np.matrix("0 1 1 0;1 0 1 1;1 1 0 1;0 1 1 0")
-#    matrica_povezanosti = genfromtxt('matrica_povezanosti_sa_papira.tsv', delimiter='\t')
     matrica_linkova = genfromtxt(matrica_linkova_file_name, delimiter=',')
-#    matrica_povezanosti = genfromtxt(matrica_povezanosti_file_name, delimiter='\t')
     # convert to matrix values to int 
     matrica_linkova = matrica_linkova.astype(np.int)
-    # sortiraj po poocetnom cvoru
-#    matrica_povezanosti = matrica_povezanosti[matrica_povezanosti[:,0].argsort()] 
 
     return matrica_linkova
 
 
-# matrica povezanosti je matrica requstetova, cija je dimenzija 3 x broj konekcija koje treba da se ostavare 
-
-
-# za slucaj da je potrebno samo dati maticu zahteva i matricu linkova
-# zato postoje ove dve funcije napravi_matricu_zahteva napravi_matricu_povezanosti_od_matrice_zahteva
 def napravi_matricu(donja_granica,
                     gornja_granica, 
                     dimenzija_kvadratne_matrice, 
@@ -110,8 +99,6 @@ def napravi_matricu_povezanosti_od_matrice_zahteva(matrica_zahteva):
     matrica_povezanosti = [[i+1,position+1,number] for i,row in enumerate(matrica_zahteva) for position,number in enumerate(row) if position!=i]
     return matrica_povezanosti
             
-
-
 
 #crtanje grapha 
 
@@ -316,11 +303,6 @@ def ako_se_praklapaju_racunaj_h(ruta_sa_kojom_se_poredi,
     return ruta_sa_najvecim_H, ruta_sa_najvecim_H_ostatak_cvorova
             
         
-
-# [ostatak_cvorova] wrapovano je u listu posto prima rute a ne rutu
-
-    
-
 def trazi_sve_preklapajuce_rute_medju_requestovima_sa_istim_pocetnim_cvorom(indeksi_requstova_koji_su_ostali,
                                                                             indeksi_requstova_koji_su_uzeti,
                                                                             requestove_sa_istim_pocetnim_cvorom,
@@ -705,7 +687,8 @@ def main():
     matrica_linkova_file_name, broj_pcela, min_slot, max_slot = parsing_argumts()
     matrica_linkova = load_matrices_from_files_names(matrica_linkova_file_name)
     
-    print(f"matrica linkova ime fajla: '{matrica_linkova_file_name}'",
+    print("PARAMETRI:",
+          f"matrica linkova ime fajla: '{matrica_linkova_file_name}'",
           f"broj pcela: '{broj_pcela}'",
           f"min slot: '{min_slot}'",
           f"max slot: '{max_slot}'",
@@ -716,6 +699,7 @@ def main():
           f"broj iteracija: '{BROJ_ITERACIJA}'",
           sep = "\n")
     
+    print("\n")
     start = time.time()
     Graph, lista_pcela = inicijalizacija(broj_pcela,
                                          min_slot,
@@ -723,13 +707,12 @@ def main():
                                          matrica_linkova)
         
     m = 0
-    while (not stop_kriterijum(lista_pcela) 
-                or m == BROJ_ITERACIJA):
+    while (not (stop_kriterijum(lista_pcela) 
+                or m == BROJ_ITERACIJA)):
         print(f"pocela je iteracija {m}")
         lista_pcela = jenda_iteracija(lista_pcela,Graph)
-        m += 1
         print(f"zavrsila se iteracija {m}")
-    
+        m += 1
     end = time.time()
     print(f"Ukupno vreme izvrsavanja je:{end - start}")
     najbolja_pcela = min(lista_pcela,key = lambda x: x.trenutni_fs)
@@ -738,7 +721,8 @@ def main():
     
     print(*[f"ukupan fs sa ustedom : {trenutni_fs}",
            f"ukupna usteda : {ukupna_usteda}",
-           f"ukupan fs bez ustede : {trenutni_fs+ukupna_usteda}"], sep = "\n")
+           f"ukupan fs bez ustede : {trenutni_fs+ukupna_usteda}",
+           f"rute koje nisu rasporednjene {najbolja_pcela.rute}"], sep = "\n")
         
 
 if __name__ == '__main__':
