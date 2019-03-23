@@ -9,6 +9,7 @@ import networkx as nx
 import math
 import random
 import copy
+import time
 
 
 ZASTITNI_OPSEG = 1
@@ -20,29 +21,34 @@ BROJ_ITERACIJA = 100
 def parsing_argumts():
     # parsing arguments
     parser = argparse.ArgumentParser(description='')
-    parser.add_argument('matrica_linkova', help='Ime fajla za matricu ruta u .tsv file formatu ')
-    parser.add_argument('matrica_povezanosti', help='Ime fajla za matricu povezanosti u .tsv file formatu ')
+    parser.add_argument('matrica_linkova', help='Ime fajla za matricu linkova u .csv file formatu ')
+    parser.add_argument('broj_pcela', help='Broj pcela za siulaciju')
+    parser.add_argument('min_slot', help='minimalni broj slotova prilikog generisanja matrice povezanosti')
+    parser.add_argument('max_slot', help='maksimalan broj slotova prilikog generisanja matrice povezanosti')
+    parser.add_argument('max_slot', help='maksimalan broj slotova prilikog generisanja matrice povezanosti')
 
     args = parser.parse_args()
     matrica_linkova_file_name = args.matrica_linkova
-    matrica_povezanosti_file_name = args.matrica_povezanosti
-
+        broj_pcela = 5
+    dimenzija_kvadratne_matrice = 10
+    min_slot = 1
+    max_slot = 4
+    
     return matrica_linkova_file_name, matrica_povezanosti_file_name 
 
-def load_matrices_from_files_names(matrica_linkova_file_name, 
-                                   matrica_povezanosti_file_name):
+def load_matrices_from_files_names(matrica_linkova_file_name):
     
     ## hardcoded values for loading matrices
-    matrica_linkova = np.matrix("0 1 1 0;1 0 1 1;1 1 0 1;0 1 1 0")
-    matrica_povezanosti = genfromtxt('matrica_povezanosti_sa_papira.tsv', delimiter='\t')
-#    matrica_linkova = genfromtxt(matrica_linkova_file_name, delimiter='\t')
+#    matrica_linkova = np.matrix("0 1 1 0;1 0 1 1;1 1 0 1;0 1 1 0")
+#    matrica_povezanosti = genfromtxt('matrica_povezanosti_sa_papira.tsv', delimiter='\t')
+    matrica_linkova = genfromtxt(matrica_linkova_file_name, delimiter=',')
 #    matrica_povezanosti = genfromtxt(matrica_povezanosti_file_name, delimiter='\t')
     # convert to matrix values to int 
-    matrica_povezanosti = matrica_povezanosti.astype(np.int)
+    matrica_linkova = matrica_linkova.astype(np.int)
     # sortiraj po poocetnom cvoru
-    matrica_povezanosti = matrica_povezanosti[matrica_povezanosti[:,0].argsort()] 
+#    matrica_povezanosti = matrica_povezanosti[matrica_povezanosti[:,0].argsort()] 
 
-    return matrica_linkova, matrica_povezanosti
+    return matrica_linkova
 
 
 # matrica povezanosti je matrica requstetova, cija je dimenzija 3 x broj konekcija koje treba da se ostavare 
@@ -73,16 +79,14 @@ def napravi_matricu_povezanosti_od_matrice_zahteva(matrica_zahteva):
 
 #crtanje grapha 
 
-def Nacrtaj_graph(matrica_linkova):
+def Nacrtaj_graph(Graph):
     
-    G = nx.from_numpy_matrix(matrica_linkova, create_using=nx.MultiDiGraph())
-    pos = nx.circular_layout(G)
-    nx.draw_circular(G)
-    labels = {i : i +1 for i in G.nodes()}
-    nx.draw_networkx_labels(G, pos, labels, font_size=15)
+    pos = nx.circular_layout(Graph)
+    nx.draw_circular(Graph)
+    labels = {i : i +1 for i in Graph.nodes()}
+    nx.draw_networkx_labels(Graph, pos, labels, font_size=15)
     plt.show()
     
-    return G
 ########################
 
 def all_paths(Graph, pocetni_cvor, terminalni_cvor):
@@ -96,11 +100,12 @@ def all_paths(Graph, pocetni_cvor, terminalni_cvor):
 
 
 class Pcela:
-    __slots__ = ['_rute', '_trenutni_fs', '_matrica_slotova']
+    __slots__ = ['_rute', '_trenutni_fs', '_matrica_slotova','_ukupna_usteda']
     def __init__(self,rute, trenutni_fs, matrica_slotova):
         self._rute = rute
         self._trenutni_fs = trenutni_fs
         self._matrica_slotova = matrica_slotova
+        self._ukupna_usteda = 0
         
         
     @property
@@ -140,10 +145,25 @@ class Pcela:
     def matrica_slotova(self):
         del self._matrica_slotova
         
+    @property
+    def ukupna_usteda(self):
+        return self._ukupna_usteda
+
+    @ukupna_usteda.setter
+    def ukupna_usteda(self, value):
+        self._ukupna_usteda = value
+
+    @ukupna_usteda.deleter
+    def ukupna_usteda(self):
+        del self._ukupna_usteda
+    
+    
+    
     def __repr__(self):
         return f"""rute: {self._rute}
                   trenutni_fs: {self._trenutni_fs}
-                  matrica_slotova: {self._matrica_slotova}"""
+                  matrica_slotova: {self._matrica_slotova},
+                  ukupna_usteda: {self.ukupna_usteda}"""
         
 
 def pravljenje_liste_pcela_sa_izmesanim_rutama(broj_pcela, 
@@ -220,7 +240,6 @@ def proveri_da_li_rute_sadrze_iste_cvorove(ruta_1, ruta_2, index, matrica_slotov
     return preklapaju_se, broj_zajednickih_linkova, ostatak_cvorova
     
     
-    
 def ako_se_praklapaju_racunaj_h(ruta_sa_kojom_se_poredi,
                                 potencijalne_rute,
                                 index_u_matrici_rute_koja_se_poredi,
@@ -287,7 +306,7 @@ def trazi_sve_preklapajuce_rute_medju_requestovima_sa_istim_pocetnim_cvorom(inde
     lista_odabranih_ruta_i_meta_informacija.append(ruta_sa_kojom_se_poredi)
     
     
-    if len(ruta_sa_kojom_se_poredi) != 2:
+    if len(ruta_sa_kojom_se_poredi[0]) != 2:
         # ako je jednako tri znaci da je ruta_sa_kojom_se_poredi duzine 2 i da ne postoji grupisanje
         # npr [4, 5, ('fs_vrednost', 1)]
     
@@ -326,14 +345,14 @@ def trazi_sve_preklapajuce_rute_medju_requestovima_sa_istim_pocetnim_cvorom(inde
                 # kada sortiras te duze requestove vidi da li da se onaj nizi u soritranom nizu ima slobodan index na poziciji kada se oni visi zavrse
                 
     
-        lista_odabranih_ruta_i_fs_vrednosti, indeksi_requstova_koji_su_ostali = proveri_da_li_se_ostaci_grupisanim_ruta_preklapaju(broj_ruta_sa_ostatkom_cvorova,
+        lista_odabranih_ruta_i_fs_vrednosti, indeksi_requstova_koji_su_ostali = proveri_da_li_se_ostaci_grupisanim_ruta_preklapaju(
                                                                                              lista_odabranih_ruta_i_meta_informacija,
                                                                                              index_u_matrici_rute_koja_se_poredi,
                                                                                              indeksi_requstova_koji_su_ostali,
                                                                                              indeksi_requstova_koji_su_uzeti,
                                                                                              matrica_slotova,
                                                                                              )
-    
+        
     else:
         # vrati na pocetak index bez fs i granicnika kako bi funkcija popunjavanje_matrice_slotova radila    
         index_u_matrici_rute_koja_se_poredi = ruta_sa_najmanjim_indeksom["index_u_matrici"]
@@ -344,8 +363,7 @@ def trazi_sve_preklapajuce_rute_medju_requestovima_sa_istim_pocetnim_cvorom(inde
     return lista_odabranih_ruta_i_fs_vrednosti, indeksi_requstova_koji_su_ostali, index_u_matrici_rute_koja_se_poredi
        
 
-def proveri_da_li_se_ostaci_grupisanim_ruta_preklapaju(broj_ruta_sa_ostatkom_cvorova,
-                                                       lista_odabranih_ruta_i_meta_informacija,
+def proveri_da_li_se_ostaci_grupisanim_ruta_preklapaju(lista_odabranih_ruta_i_meta_informacija,
                                                        index_u_matrici_rute_koja_se_poredi,
                                                        indeksi_requstova_koji_su_ostali,
                                                        indeksi_requstova_koji_su_uzeti,
@@ -360,21 +378,20 @@ def proveri_da_li_se_ostaci_grupisanim_ruta_preklapaju(broj_ruta_sa_ostatkom_cvo
     lista_odabranih_ruta_i_meta_informacija = lista_odabranih_ruta_i_meta_informacija[1:]
     lista_odabranih_ruta_i_meta_informacija.sort(key= lambda x: len(x[0]), reverse = True)
     
-    if broj_ruta_sa_ostatkom_cvorova > 1:
-        for ruta_i_meta_info in lista_odabranih_ruta_i_meta_informacija:
-            ruta = ruta_i_meta_info[0]
-            fs_tuple = ruta_i_meta_info
-            ostatak_cvorova = ruta_i_meta_info[2][1]
-            if ostatak_cvorova is not None:
-                index_slobodnog_slota = racunaj_startu_poziciju_za_popunjavanje_matrice([ostatak_cvorova],matrica_slotova)
-                if index_slobodnog_slota <= index_u_matrici_rute_koja_se_poredi_dopunjen:
-                    lista_odabranih_ruta_i_fs_vrednosti.append([ruta,fs_tuple])
-                    index_u_matrici_rute_koja_se_poredi_dopunjen += fs_tuple[1]
-                else:
-                    index_iter = ruta_i_meta_info[3][1]
-                    indeksi_requstova_koji_su_ostali.append(indeksi_requstova_koji_su_uzeti[index_iter])
-            else:
+    for ruta_i_meta_info in lista_odabranih_ruta_i_meta_informacija:
+        ruta = ruta_i_meta_info[0]
+        fs_tuple = ruta_i_meta_info[1]
+        ostatak_cvorova = ruta_i_meta_info[2][1]
+        if ostatak_cvorova is not None:
+            index_slobodnog_slota = racunaj_startu_poziciju_za_popunjavanje_matrice([ostatak_cvorova],matrica_slotova)
+            if index_slobodnog_slota["index_u_matrici"] <= index_u_matrici_rute_koja_se_poredi_dopunjen:
                 lista_odabranih_ruta_i_fs_vrednosti.append([ruta,fs_tuple])
+                index_u_matrici_rute_koja_se_poredi_dopunjen += fs_tuple[1]
+            else:
+                index_iter = ruta_i_meta_info[3][1]
+                indeksi_requstova_koji_su_ostali.append(indeksi_requstova_koji_su_uzeti[index_iter])
+        else:
+            lista_odabranih_ruta_i_fs_vrednosti.append([ruta,fs_tuple])
             
     return lista_odabranih_ruta_i_fs_vrednosti, indeksi_requstova_koji_su_ostali
 
@@ -386,6 +403,9 @@ def uzmi_n_requsteova_sa_pocekta_pcele(pcela,Graph):
     n_broj_requestova = BROJ_REQUESTOVA_ZA_RAZMATRANJE_PO_ITERACIJI_PO_PCELI
     # za svaki od 3 requesta pronadji redom koji requstovi iz ostatka pcele sadrze
     # zajednicki pocetni cvor 
+    len_pcela_rute = len(pcela.rute)
+    if len_pcela_rute < n_broj_requestova:
+        n_broj_requestova = len_pcela_rute
     ostatak_requestova = pcela.rute[n_broj_requestova:]
     for i in range(n_broj_requestova):
         pocetni_request = pcela.rute[i]
@@ -394,6 +414,7 @@ def uzmi_n_requsteova_sa_pocekta_pcele(pcela,Graph):
                                                                                                                                                                    ostatak_requestova)
         
         
+#        print("requestove_sa_istim_pocetnim_cvorom",requestove_sa_istim_pocetnim_cvorom)
         lista_odabranih_ruta_i_fs_vrednosti, indeksi_requstova_koji_su_ostali, index_u_matrici_rute_koja_se_poredi = trazi_sve_preklapajuce_rute_medju_requestovima_sa_istim_pocetnim_cvorom(indeksi_requstova_koji_su_ostali,
                                                                                                                                                         indeksi_requstova_koji_su_uzeti,
                                                                                                                                                         requestove_sa_istim_pocetnim_cvorom,
@@ -401,10 +422,11 @@ def uzmi_n_requsteova_sa_pocekta_pcele(pcela,Graph):
                                                                                                                                                         pcela.matrica_slotova)
         ostatak_requestova = pcela.rute[indeksi_requstova_koji_su_ostali]
         
-        popunjavanje_matrice_slotova(lista_odabranih_ruta_i_fs_vrednosti,
-                                                             pcela.matrica_slotova,
-                                                             Graph,
-                                                             index_u_matrici_rute_koja_se_poredi)       
+        pcela.ukupna_usteda = popunjavanje_matrice_slotova(lista_odabranih_ruta_i_fs_vrednosti,
+                                     pcela.matrica_slotova,
+                                     pcela.ukupna_usteda,
+                                     Graph,
+                                     index_u_matrici_rute_koja_se_poredi)       
         
     pcela.rute = ostatak_requestova
     pcela.trenutni_fs = racunaj_sumu_trenutnog_fs(pcela.matrica_slotova)
@@ -423,11 +445,16 @@ def napravi_matricu_slotova(Graph):
     return matrica_slotova_as_dict
 
 
+def racunaj_ustede_usled_grupisanja(broj_grupisanih_requestova_po_ruti):
+    return 2*ZASTITNI_OPSEG*(broj_grupisanih_requestova_po_ruti-1)
+
 def popunjavanje_matrice_slotova(lista_odabranih_ruta_i_fs_vrednosti,
                                  matrica_slotova,
+                                 ukupna_usteda,
                                  Graph,
                                  index_u_matrici_rute_koja_se_poredi):
 
+#    print("lista_odabranih_ruta_i_fs_vrednosti",lista_odabranih_ruta_i_fs_vrednosti)
     rute_za_grupisanje = lista_odabranih_ruta_i_fs_vrednosti
 
     rute_koje_imaju_slobodne_slotove_sa_zero_pading = copy.deepcopy(rute_za_grupisanje)
@@ -443,8 +470,11 @@ def popunjavanje_matrice_slotova(lista_odabranih_ruta_i_fs_vrednosti,
     for ruta in rute_koje_imaju_slobodne_slotove_sa_zero_pading:
         zero_pading(ruta[0],duzina_najduze_rute)
     
-        
+    ukupna_usteda = copy.deepcopy(ukupna_usteda)    
     for broj_koraka in range(1,duzina_najduze_rute):
+        broj_grupisanih_ruta_korak_jedan = 0
+        broj_grupisanih_ruta_ostali_koraci = 0
+        usteda_po_koraku = 0
         for ruta_i_fs in rute_koje_imaju_slobodne_slotove_sa_zero_pading:
             
             if broj_koraka == 1:
@@ -454,6 +484,7 @@ def popunjavanje_matrice_slotova(lista_odabranih_ruta_i_fs_vrednosti,
                 drugi_cvor = ruta[1]
                 link = "_".join([str(prvi_cvor),str(drugi_cvor)])
                 zbirni_fs_po_linku = zbir_svih_fs
+                broj_grupisanih_ruta_korak_jedan +=1
 #                print(broj_koraka)
 #                print(ruta, prvi_cvor, drugi_cvor, zbirni_fs_po_linku)
                 
@@ -465,16 +496,27 @@ def popunjavanje_matrice_slotova(lista_odabranih_ruta_i_fs_vrednosti,
                 if prvi_cvor != 0 and drugi_cvor != 0:
                     link = "_".join([str(prvi_cvor),str(drugi_cvor)])
                     zbirni_fs_po_linku += fs
+                    broj_grupisanih_ruta_ostali_koraci += 1
 #                print(broj_koraka)
 #                print(ruta, prvi_cvor, drugi_cvor,zbirni_fs_po_linku)
-                
+
+#        print("broj_grupisanih_ruta_korak_jedan",broj_grupisanih_ruta_korak_jedan)
+#        print("broj_grupisanih_ruta_ostali_koraci",broj_grupisanih_ruta_ostali_koraci)
+        usteda_po_koraku = racunaj_ustede_usled_grupisanja(broj_grupisanih_ruta_korak_jedan
+                                                           +broj_grupisanih_ruta_ostali_koraci)
+        
+#        print("usteda_po_koraku",usteda_po_koraku)
+        
+        ukupna_usteda += usteda_po_koraku
+        
+#        print("ukupna_usteda",ukupna_usteda)
                 
         zbirni_fs_po_linku_i_zastigni_opseg = ZASTITNI_OPSEG + zbirni_fs_po_linku + ZASTITNI_OPSEG - 1 # posto je zero based array
         matrica_slotova[link].append(index_u_matrici_rute_koja_se_poredi + zbirni_fs_po_linku_i_zastigni_opseg) 
         # ako bi cuvao i rupe onda bi ovde trebalo da ide index_u_matrici_rute_koja_se_poredi - matrica_slotova[link][-1] 
         zbirni_fs_po_linku = 0
     
-    
+    return ukupna_usteda
 
     
 def zero_pading(list_for_transformation,len_of_list_after_pading):
@@ -513,48 +555,6 @@ def racunaj_startu_poziciju_za_popunjavanje_matrice(rute, matrica_slotova_as_dic
             
                 
     return ruta_sa_najmanjim_indeksom
-
-
-#def izbaci_rute_koji_imaju_zauzete_linkove_koje_ruta_za_porednjenje_ne_sadrzi(matrica_slotova,
-#                                                                              ruta_za_porednjenje,
-#                                                                              rute):
-#    
-#
-#    startna_pozicija_za_popunjavanje_matrice_slotova = racunaj_startu_poziciju_za_popunjavanje_matrice([ruta_za_porednjenje], matrica_slotova)
-#    print("POSLE OVOG AAAAAAA")
-#    # posto me zanima broj slota bez zadnjeg granicnika ZASTITNI_OPSEG
-#    zbir_fs = ZASTITNI_OPSEG + startna_pozicija_za_popunjavanje_matrice_slotova + 1
-#    rute_koje_imaju_slobodne_slotove = []
-#    rute_koje_imaju_slobodne_slotove.append(ruta_za_porednjenje)
-#    if rute != []:
-#        for index,cvorovi_i_fs in enumerate(rute):
-#            zadrzi_rutu = True
-#            cvorovi, fs = cvorovi_i_fs
-#            len_cvorovi = len(cvorovi)
-#            for index_cvor,cvor in enumerate(cvorovi):
-#                if cvor not in ruta_za_porednjenje[0]:
-#                    
-#                    #vrati broj slota
-#                    link_izmedju_cvorova_list = []
-#                    if len_cvorovi == index_cvor:
-#                       link_izmedju_cvorova_list.append("_".join([str(cvorovi[index_cvor-1]),str(cvor)]))
-#                    
-#                    else:
-#                        # cvor koji ruta za porednjenje ne sadrzi nije na kraju 
-#                        # OVO MOZDA BUDE MORALO DA SE MENJA JER MOZE POSTOJIATI SLUCAJ kada svaki link izmedju dva cvora je slobodan ali je umetnuto vise linkova pa se svi moraju uzeti u obzir
-#                        link_izmedju_cvorova_list.append("_".join([str(cvorovi[index_cvor-1]),str(cvor)]),
-#                                                         "_".join([str(cvor),str(cvorovi[index_cvor+1])]))
-#                    
-#                    for link_izmedju_cvorova in link_izmedju_cvorova_list:
-#                        if matrica_slotova[link_izmedju_cvorova][-1] > zbir_fs:
-#                            zadrzi_rutu = False
-#                        
-#            if zadrzi_rutu is True:
-#               rute_koje_imaju_slobodne_slotove.append(cvorovi_i_fs) 
-#               zbir_fs += fs[1]
-#    
-#    return rute_koje_imaju_slobodne_slotove
-
 
     
 def racunaj_verovatnoce(pcela,
@@ -630,31 +630,28 @@ def regrutacija_pcela(pcela_parcijalno_resenje_sa_verovatnocama,ob_sum_recruter)
 
         
 
-def inicijalizacija():
+def inicijalizacija(broj_pcela,
+                    dimenzija_kvadratne_matrice,
+                    min_slot,
+                    max_slot,
+                    matrica_linkova = None):
 
-
-    broj_pcela = 5
-    dimenzija_kvadratne_matrice = 6
-    min_slot = 1
-    max_slot = 4
 
     # matrica_linkova, matrica_povezanosti = load_matrices_from_files_names("dummy1", "dummy2")
-    matrica_linkova = napravi_matricu(1, 1, dimenzija_kvadratne_matrice, dijagola_nule=True)
+    if matrica_linkova is None:
+        matrica_linkova = napravi_matricu(1, 1, dimenzija_kvadratne_matrice, dijagola_nule=True)
+        dimenzija_kvadratne_matrice = matrica_linkova.shape[0]
     matrica_zahteva = napravi_matricu(min_slot, max_slot, dimenzija_kvadratne_matrice, dijagola_nule=True)
     matrica_povezanosti = napravi_matricu_povezanosti_od_matrice_zahteva(matrica_zahteva)
     
     Graph = nx.from_numpy_matrix(matrica_linkova, create_using=nx.MultiDiGraph())
-
+    Nacrtaj_graph(Graph)
     lista_pcela = pravljenje_liste_pcela_sa_izmesanim_rutama(broj_pcela, 
                                                              matrica_povezanosti,
                                                              Graph)
     
     return Graph,lista_pcela
     
-    for pcela in lista_pcela:
-        uzmi_n_requsteova_sa_pocekta_pcele(pcela,Graph)
-
-    lista_pcela_posle_follow_recruter_faze = poredi_pcele(lista_pcela)
 
 
 #proveri kako da uradis deep copy klase :) mozes damo da je iniciras, tako sto pokupis property-ije ali moze isto da pogledas __deepcopy__
@@ -670,12 +667,37 @@ def stop_kriterijum(lista_pcela):
     return all(True if pcela.rute.size == 0 else False for pcela in lista_pcela )
 
 def main():
-    Graph, lista_pcela = inicijalizacija()
-    for m in range(BROJ_ITERACIJA):
+    broj_pcela = 5
+    dimenzija_kvadratne_matrice = 10
+    min_slot = 1
+    max_slot = 4
+    
+    matrica_linkova = load_matrices_from_files_names("14.csv")
+    start = time.time()
+    Graph, lista_pcela = inicijalizacija(broj_pcela,
+                                         dimenzija_kvadratne_matrice,
+                                         min_slot,
+                                         max_slot,
+                                         matrica_linkova)
+        
+    m = 0
+    while (not stop_kriterijum(lista_pcela) 
+                or m == BROJ_ITERACIJA):
+        print(f"pocela je iteracija {m}")
         lista_pcela = jenda_iteracija(lista_pcela,Graph)
-        print(m)
-        if stop_kriterijum(lista_pcela):
-            break
+        m += 1
+        print(f"zavrsila se iteracija {m}")
+    
+    end = time.time()
+    print(f"Ukupno vreme izvrsavanja je:{end - start}")
+    najbolja_pcela = min(lista_pcela,key = lambda x: x.trenutni_fs)
+    trenutni_fs = najbolja_pcela.trenutni_fs
+    ukupna_usteda = najbolja_pcela.ukupna_usteda
+    
+    print(*[f"ukupan fs sa ustedom : {trenutni_fs}",
+           f"ukupna usteda : {ukupna_usteda}",
+           f"ukupan fs bez ustede : {trenutni_fs+ukupna_usteda}"], sep = "\n")
+        
 
 #if __name__ == '__main__':
 #    main()
