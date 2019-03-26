@@ -10,11 +10,20 @@ import random
 import copy
 import time
 
+
+import sys
+import warnings
+
+if not sys.warnoptions:
+    warnings.simplefilter("ignore")
+
+
+
 ZASTITNI_OPSEG = 1
 KAPACITET_TRANSMITERA = 8
 BROJ_REQUESTOVA_ZA_RAZMATRANJE_PO_ITERACIJI_PO_PCELI = 3
 BROJ_RUTA_K = 3
-BROJ_ITERACIJA = 100 
+BROJ_ITERACIJA = 3
 
 
 def parsing_argumts():
@@ -24,7 +33,7 @@ def parsing_argumts():
     KAPACITET_TRANSMITERA = 8
     BROJ_REQUESTOVA_ZA_RAZMATRANJE_PO_ITERACIJI_PO_PCELI = 3
     BROJ_RUTA_K = 3
-    BROJ_ITERACIJA = 100 
+    BROJ_ITERACIJA = 3
     
     parser = argparse.ArgumentParser(description='Algoritam za izracunavanja popunjenosti mreze slotova baziran na heuristici - optimizacija kolonijom pcela (BCO)')
     
@@ -53,7 +62,10 @@ def parsing_argumts():
                         help='Broj uzetih ruta za razmatranje prilikom grupisanja.',default = BROJ_RUTA_K,type=int)
 
     parser.add_argument('-i','--broj_iteracija', 
-                        help='Broj iteracija nakog koga algoritam staje ukoliko ni jedan drugi kriterijum zaustavljanja nije ispunjen.',default = BROJ_ITERACIJA,type=int)
+                        help='Broj iteracija',default = BROJ_ITERACIJA,type=int)
+
+    parser.add_argument('-o','--output', 
+                        help='Ime file gde se sacuvati tabela sa rezultatima',default = "rezultat.csv",type=str)
 
 
 
@@ -62,6 +74,7 @@ def parsing_argumts():
     broj_pcela = args.broj_pcela
     min_slot = args.min_slot
     max_slot = args.max_slot
+    output = args.output
     
     KAPACITET_TRANSMITERA = args.kapacitet_trasmitera
     ZASTITNI_OPSEG = args.zastitni_opseg
@@ -70,7 +83,7 @@ def parsing_argumts():
     BROJ_ITERACIJA = args.broj_iteracija
 
 
-    return matrica_linkova_file_name, broj_pcela, min_slot, max_slot
+    return matrica_linkova_file_name, broj_pcela, min_slot, max_slot, output
 
 def load_matrices_from_files_names(matrica_linkova_file_name):
     
@@ -671,7 +684,7 @@ def inicijalizacija(broj_pcela,
 
 
 #proveri kako da uradis deep copy klase :) mozes damo da je iniciras, tako sto pokupis property-ije ali moze isto da pogledas __deepcopy__
-def jenda_iteracija(lista_pcela,Graph):
+def jedno_grupisanje(lista_pcela,Graph):
     for pcela in lista_pcela:
         uzmi_n_requsteova_sa_pocekta_pcele(pcela,Graph)
 
@@ -682,9 +695,44 @@ def jenda_iteracija(lista_pcela,Graph):
 def stop_kriterijum(lista_pcela):
     return all(True if pcela.rute.size == 0 else False for pcela in lista_pcela )
 
+
+def napravi_tabelu(sve_vrednosti,file_name):
+    delimator = "\t"
+    len_sve_vrednosti = len(sve_vrednosti)
+    ukupan_fs_srednja_vrednost = sum(el["ukupan_fs"] for el in sve_vrednosti if el.get("ukupan_fs",False))/len_sve_vrednosti
+    ukupna_usteda_srednja_vrednost= sum(el["ukupna_usteda"] for el in sve_vrednosti if el.get("ukupna_usteda",False))/len_sve_vrednosti
+    ukupan_fs_bez_ustede_srednja_vrednost =sum(el["ukupan_fs_bez_ustede"] for el in sve_vrednosti if el.get("ukupan_fs_bez_ustede",False))/len_sve_vrednosti
+    vreme_egzekucije_srednja_vrednost =sum(el["vreme_egzekucije"] for el in sve_vrednosti if el.get("vreme_egzekucije",False))/len_sve_vrednosti
+
+
+    output_tabela = []
+    header = delimator.join(list(sve_vrednosti[0].keys()))
+    output_tabela.append(header)
+
+    lista_redova = []
+    for el in sve_vrednosti:   
+        red = delimator.join([str(e) for e in el.values()])
+        lista_redova.append(red)
+    output_tabela.extend(lista_redova)
+    
+    footer = delimator.join(["ukupan_fs_srednja_vrednost",
+              "ukupna_usteda_srednja_vrednost",
+              "ukupan_fs_bez_ustede_srednja_vrednost",
+              "vreme_egzekucije_srednja_vrednost"])
+    footer_values = delimator.join((str(el) for el in [ukupan_fs_srednja_vrednost,
+                                    ukupna_usteda_srednja_vrednost, 
+                                    ukupan_fs_bez_ustede_srednja_vrednost,
+                                    vreme_egzekucije_srednja_vrednost]))
+    output_tabela.append(footer)
+    output_tabela.append(footer_values)
+
+    with open(file_name, "w") as f:
+        print(*output_tabela, sep = "\n", file=f)
+    
+    
 def main():
 
-    matrica_linkova_file_name, broj_pcela, min_slot, max_slot = parsing_argumts()
+    matrica_linkova_file_name, broj_pcela, min_slot, max_slot, file_name = parsing_argumts()
     matrica_linkova = load_matrices_from_files_names(matrica_linkova_file_name)
     
     print("PARAMETRI:",
@@ -697,33 +745,53 @@ def main():
           f"broj requestova za razmatranje po iteraciji po pceli: '{BROJ_REQUESTOVA_ZA_RAZMATRANJE_PO_ITERACIJI_PO_PCELI}'",
           f"broj ruta k: '{BROJ_RUTA_K}'",
           f"broj iteracija: '{BROJ_ITERACIJA}'",
+          f"ime output file: '{file_name}'",
           sep = "\n")
     
     print("\n")
-    start = time.time()
-    Graph, lista_pcela = inicijalizacija(broj_pcela,
+    
+    Graph, lista_pcela_pocenta = inicijalizacija(broj_pcela,
                                          min_slot,
                                          max_slot,
                                          matrica_linkova)
         
-    m = 0
-    while (not (stop_kriterijum(lista_pcela) 
-                or m == BROJ_ITERACIJA)):
-        print(f"pocela je iteracija {m}")
-        lista_pcela = jenda_iteracija(lista_pcela,Graph)
-        print(f"zavrsila se iteracija {m}")
-        m += 1
-    end = time.time()
-    print(f"Ukupno vreme izvrsavanja je:{end - start}")
-    najbolja_pcela = min(lista_pcela,key = lambda x: x.trenutni_fs)
-    trenutni_fs = najbolja_pcela.trenutni_fs
-    ukupna_usteda = najbolja_pcela.ukupna_usteda
-    
-    print(*[f"ukupan fs sa ustedom : {trenutni_fs}",
-           f"ukupna usteda : {ukupna_usteda}",
-           f"ukupan fs bez ustede : {trenutni_fs+ukupna_usteda}",
-           f"rute koje nisu rasporednjene {najbolja_pcela.rute}"], sep = "\n")
+    print("Initialisation is finished")
+    print("\n")
+
+    start_ukupno = time.time()
+    sve_vrednosti = []
+    for i in range(BROJ_ITERACIJA):
+        start = time.time()
+        m = 0
+        print(f"The iteration {i+1}. started")
+        lista_pcela = copy.deepcopy(lista_pcela_pocenta)
+        while not stop_kriterijum(lista_pcela):
+            lista_pcela = jedno_grupisanje(lista_pcela,Graph)
+            m += 1
+        end = time.time()
         
+        vreme_egzekucije = end - start
+        print(f"Time of execution per iteration:{vreme_egzekucije}")
+        najbolja_pcela = min(lista_pcela,key = lambda x: x.trenutni_fs)
+        trenutni_fs = najbolja_pcela.trenutni_fs
+        ukupna_usteda = najbolja_pcela.ukupna_usteda
+        
+        ukupan_fs_bez_ustede = trenutni_fs+ukupna_usteda
+        sve_vrednosti.append({"ukupan_fs":trenutni_fs,
+                              "ukupna_usteda":ukupna_usteda,
+                              "ukupan_fs_bez_ustede": ukupan_fs_bez_ustede,
+                              "vreme_egzekucije": vreme_egzekucije
+                              })
+        print(*[f"ukupan fs sa ustedom: {trenutni_fs}",
+               f"ukupna usteda : {ukupna_usteda}",
+               f"ukupan fs bez ustede : {ukupan_fs_bez_ustede}"], sep = "\n")
+        print(f"The iteration {i+1}. is finished")
+        print("\n\n")
+    end_ukupno = time.time()
+    print(f"Ukupno izvrsavanja je:{end_ukupno - start_ukupno}")
+    
+    napravi_tabelu(sve_vrednosti,file_name)
+    
 
 if __name__ == '__main__':
     main()
