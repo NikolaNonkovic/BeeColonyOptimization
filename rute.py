@@ -66,6 +66,10 @@ def parsing_argumts():
 
     parser.add_argument('-o','--output', 
                         help='Ime file gde se sacuvati tabela sa rezultatima',default = "rezultat.csv",type=str)
+    
+    
+    parser.add_argument('-mz','--matrica_zahteva', 
+                        help='Matrica zahteva',default = None ,type=str)
 
 
 
@@ -75,6 +79,7 @@ def parsing_argumts():
     min_slot = args.min_slot
     max_slot = args.max_slot
     output = args.output
+    matrica_zahteva = ucitaj_matricu_zahteva(args.matrica_zahteva)
     
     KAPACITET_TRANSMITERA = args.kapacitet_trasmitera
     ZASTITNI_OPSEG = args.zastitni_opseg
@@ -83,7 +88,14 @@ def parsing_argumts():
     BROJ_ITERACIJA = args.broj_iteracija
 
 
-    return matrica_linkova_file_name, broj_pcela, min_slot, max_slot, output
+    return matrica_linkova_file_name, broj_pcela, min_slot, max_slot, output, matrica_zahteva
+
+def ucitaj_matricu_zahteva(matrica_zahteva):
+    if matrica_zahteva is None:
+        return matrica_zahteva
+    else:
+        return load_matrices_from_files_names(matrica_zahteva)
+
 
 def load_matrices_from_files_names(matrica_linkova_file_name):
     
@@ -204,7 +216,8 @@ class Pcela:
 
 def pravljenje_liste_pcela_sa_izmesanim_rutama(broj_pcela, 
                                                matrica_povezanosti,
-                                               Graph): 
+                                               Graph,
+                                               random = True): 
     
     #svaki red u matrici povezanosti je jenda ruta, sto znaci da je pcela matrica povezanosti -->samo suffle
     lista_pcela = []
@@ -214,7 +227,8 @@ def pravljenje_liste_pcela_sa_izmesanim_rutama(broj_pcela,
     matrica_slotova = napravi_matricu_slotova(Graph)
         
     for i in range(broj_pcela):
-        np.random.shuffle(matrica_povezanosti_copy) #permute rows 
+        if random is True:
+            np.random.shuffle(matrica_povezanosti_copy) #permute rows 
         matrica_povezanosti_shuffled = np.copy(matrica_povezanosti_copy) 
         pcela = Pcela(matrica_povezanosti_shuffled,trenutni_fs,matrica_slotova)
         lista_pcela.append(pcela) 
@@ -664,22 +678,28 @@ def regrutacija_pcela(pcela_parcijalno_resenje_sa_verovatnocama,ob_sum_recruter)
 def inicijalizacija(broj_pcela,
                     min_slot,
                     max_slot,
-                    matrica_linkova):
+                    matrica_linkova,
+                    matrica_zahteva = None):
 
 
     # matrica_linkova, matrica_povezanosti = load_matrices_from_files_names("dummy1", "dummy2")
     dimenzija_kvadratne_matrice = matrica_linkova.shape[0]
         
-    matrica_zahteva = napravi_matricu(min_slot, max_slot, dimenzija_kvadratne_matrice, dijagola_nule=True)
+    if matrica_zahteva is None:
+        matrica_zahteva = napravi_matricu(min_slot, max_slot, dimenzija_kvadratne_matrice, dijagola_nule=True)
+        random = True
+    else:
+        random = False
+
     matrica_povezanosti = napravi_matricu_povezanosti_od_matrice_zahteva(matrica_zahteva)
-    
+
     Graph = nx.from_numpy_matrix(matrica_linkova, create_using=nx.MultiDiGraph())
 #    Nacrtaj_graph(Graph)
     lista_pcela = pravljenje_liste_pcela_sa_izmesanim_rutama(broj_pcela, 
                                                              matrica_povezanosti,
-                                                             Graph)
-    
-    return Graph,lista_pcela
+                                                             Graph,
+                                                             random)
+    return Graph,lista_pcela, matrica_zahteva
     
 
 
@@ -730,31 +750,43 @@ def napravi_tabelu(sve_vrednosti,file_name):
         print(*output_tabela, sep = "\n", file=f)
     
     
+def napravi_matrica_zahteva_file(matrica_zahteva, 
+                                 file_name):
+    with open(file_name,"wt") as file:
+        print(*(", ".join([str(el) for el in list(row)]) for row in matrica_zahteva), 
+              sep = '\n', file = file)
+    
 def main():
-
-    matrica_linkova_file_name, broj_pcela, min_slot, max_slot, file_name = parsing_argumts()
+    
+    matrica_linkova_file_name, broj_pcela, min_slot, max_slot, file_name, matrica_zahteva = parsing_argumts()
     matrica_linkova = load_matrices_from_files_names(matrica_linkova_file_name)
     
-    print("PARAMETRI:",
-          f"matrica linkova ime fajla: '{matrica_linkova_file_name}'",
-          f"broj pcela: '{broj_pcela}'",
-          f"min slot: '{min_slot}'",
-          f"max slot: '{max_slot}'",
-          f"zastitni opseg: '{ZASTITNI_OPSEG}'",
-          f"kapacitet transmitera: '{KAPACITET_TRANSMITERA}'",
-          f"broj requestova za razmatranje po iteraciji po pceli: '{BROJ_REQUESTOVA_ZA_RAZMATRANJE_PO_ITERACIJI_PO_PCELI}'",
-          f"broj ruta k: '{BROJ_RUTA_K}'",
-          f"broj iteracija: '{BROJ_ITERACIJA}'",
-          f"ime output file: '{file_name}'",
-          sep = "\n")
+
     
-    print("\n")
-    
-    Graph, lista_pcela_pocenta = inicijalizacija(broj_pcela,
+    Graph, lista_pcela_pocenta, matrica_zahteva = inicijalizacija(broj_pcela,
                                          min_slot,
                                          max_slot,
-                                         matrica_linkova)
+                                         matrica_linkova,
+                                         matrica_zahteva)
         
+    print("PARAMETRI:",
+      f"matrica linkova ime fajla: '{matrica_linkova_file_name}'",
+      f"broj pcela: '{broj_pcela}'",
+      f"min slot: '{min_slot}'",
+      f"max slot: '{max_slot}'",
+      f"zastitni opseg: '{ZASTITNI_OPSEG}'",
+      f"kapacitet transmitera: '{KAPACITET_TRANSMITERA}'",
+      f"broj requestova za razmatranje po iteraciji po pceli: '{BROJ_REQUESTOVA_ZA_RAZMATRANJE_PO_ITERACIJI_PO_PCELI}'",
+      f"broj ruta k: '{BROJ_RUTA_K}'",
+      f"broj iteracija: '{BROJ_ITERACIJA}'",
+      f"ime output file: '{file_name}'",
+      f"matrica zahteva: \n'{matrica_zahteva}'",
+      sep = "\n")
+
+    print("\n")    
+
+    
+    
     print("Initialisation is finished")
     print("\n")
 
@@ -791,6 +823,8 @@ def main():
     print(f"Ukupno izvrsavanja je:{end_ukupno - start_ukupno}")
     
     napravi_tabelu(sve_vrednosti,file_name)
+    file_name = f"{min_slot}_{max_slot}_matrica_zahteva.csv"
+    napravi_matrica_zahteva_file(matrica_zahteva,file_name)
     
 
 if __name__ == '__main__':
