@@ -70,7 +70,14 @@ def parsing_argumts():
     
     parser.add_argument('-mz','--matrica_zahteva', 
                         help='Matrica zahteva',default = None ,type=str)
+    
+    parser.add_argument('-s','--sort_req', 
+                        help='Sortiraj requestove od najmanje ka najvecoj vrednosti FS',
+                        action='store_true')
 
+    parser.add_argument('-rs','--sort_req_reverse', 
+                        help='Sortiraj requestove od najvece ka najmanjoj vrednosti FS',
+                        action='store_true')
 
 
     args = parser.parse_args()
@@ -80,6 +87,8 @@ def parsing_argumts():
     max_slot = args.max_slot
     output = args.output
     matrica_zahteva = ucitaj_matricu_zahteva(args.matrica_zahteva)
+    sort_req = args.sort_req
+    sort_req_reverse = args.sort_req_reverse
     
     KAPACITET_TRANSMITERA = args.kapacitet_trasmitera
     ZASTITNI_OPSEG = args.zastitni_opseg
@@ -88,7 +97,7 @@ def parsing_argumts():
     BROJ_ITERACIJA = args.broj_iteracija
 
 
-    return matrica_linkova_file_name, broj_pcela, min_slot, max_slot, output, matrica_zahteva
+    return matrica_linkova_file_name, broj_pcela, min_slot, max_slot, output, matrica_zahteva, sort_req, sort_req_reverse
 
 def ucitaj_matricu_zahteva(matrica_zahteva):
     if matrica_zahteva is None:
@@ -217,7 +226,7 @@ class Pcela:
 def pravljenje_liste_pcela_sa_izmesanim_rutama(broj_pcela, 
                                                matrica_povezanosti,
                                                Graph,
-                                               random = True): 
+                                               ordering_of_requests): 
     
     #svaki red u matrici povezanosti je jenda ruta, sto znaci da je pcela matrica povezanosti -->samo suffle
     lista_pcela = []
@@ -226,10 +235,17 @@ def pravljenje_liste_pcela_sa_izmesanim_rutama(broj_pcela,
     matrica_slotova = []
     matrica_slotova = napravi_matricu_slotova(Graph)
         
+    ordering_of_requests_switch = {"sorted": lambda matrica : matrica[matrica[:,-1].argsort()],
+                                   "sorted_reversed": lambda matrica : matrica[matrica[:,-1].argsort()[::-1]],
+                                   "random": lambda matrica : matrica}
+    
     for i in range(broj_pcela):
-        if random is True:
-            np.random.shuffle(matrica_povezanosti_copy) #permute rows 
-        matrica_povezanosti_shuffled = np.copy(matrica_povezanosti_copy) 
+        
+        np.random.shuffle(matrica_povezanosti_copy) #permute rows 
+        matrica_povezanosti_shuffled = np.copy(matrica_povezanosti_copy)
+        matrica_povezanosti_shuffled = ordering_of_requests_switch[ordering_of_requests](matrica_povezanosti_copy)
+
+#        print("matrica_povezanosti_shuffled", matrica_povezanosti_shuffled)
         pcela = Pcela(matrica_povezanosti_shuffled,trenutni_fs,matrica_slotova)
         lista_pcela.append(pcela) 
     
@@ -673,13 +689,14 @@ def regrutacija_pcela(pcela_parcijalno_resenje_sa_verovatnocama,ob_sum_recruter)
                     
     return lista_pcela_posle_follow_recruter_faze
 
-        
 
 def inicijalizacija(broj_pcela,
                     min_slot,
                     max_slot,
                     matrica_linkova,
-                    matrica_zahteva = None):
+                    matrica_zahteva,
+                    sort_req,
+                    sort_req_reverse):
 
 
     # matrica_linkova, matrica_povezanosti = load_matrices_from_files_names("dummy1", "dummy2")
@@ -687,10 +704,15 @@ def inicijalizacija(broj_pcela,
         
     if matrica_zahteva is None:
         matrica_zahteva = napravi_matricu(min_slot, max_slot, dimenzija_kvadratne_matrice, dijagola_nule=True)
-        random = True
-    else:
-        random = False
+    
+    
+    ordering_of_requests = "random"
+    if sort_req is True:
+        ordering_of_requests = "sorted"
+    if sort_req_reverse is True:
+        ordering_of_requests = "sorted_reversed"
 
+    print("ordering_of_requests", ordering_of_requests)
     matrica_povezanosti = napravi_matricu_povezanosti_od_matrice_zahteva(matrica_zahteva)
 
     Graph = nx.from_numpy_matrix(matrica_linkova, create_using=nx.MultiDiGraph())
@@ -698,7 +720,8 @@ def inicijalizacija(broj_pcela,
     lista_pcela = pravljenje_liste_pcela_sa_izmesanim_rutama(broj_pcela, 
                                                              matrica_povezanosti,
                                                              Graph,
-                                                             random)
+                                                             ordering_of_requests)
+    
     return Graph,lista_pcela, matrica_zahteva
     
 
@@ -755,10 +778,17 @@ def napravi_matrica_zahteva_file(matrica_zahteva,
     with open(file_name,"wt") as file:
         print(*(", ".join([str(el) for el in list(row)]) for row in matrica_zahteva), 
               sep = '\n', file = file)
+   
+def parsiraj_matrica_slotova(matrica_slotova):
+    list_of_lines = []
+    for key,value in matrica_slotova.items():
+        list_of_lines.append(key.replace("_", "-") + "\t" +  str(int(value[-1]) + 1))
     
+    return "\n".join(list_of_lines)
+
 def main():
     
-    matrica_linkova_file_name, broj_pcela, min_slot, max_slot, file_name, matrica_zahteva = parsing_argumts()
+    matrica_linkova_file_name, broj_pcela, min_slot, max_slot, file_name, matrica_zahteva, sort_req, sort_req_reverse = parsing_argumts()
     matrica_linkova = load_matrices_from_files_names(matrica_linkova_file_name)
     
 
@@ -767,7 +797,9 @@ def main():
                                          min_slot,
                                          max_slot,
                                          matrica_linkova,
-                                         matrica_zahteva)
+                                         matrica_zahteva,
+                                         sort_req,
+                                         sort_req_reverse)
         
     print("PARAMETRI:",
       f"matrica linkova ime fajla: '{matrica_linkova_file_name}'",
@@ -807,6 +839,7 @@ def main():
         najbolja_pcela = min(lista_pcela,key = lambda x: x.trenutni_fs)
         trenutni_fs = najbolja_pcela.trenutni_fs
         ukupna_usteda = najbolja_pcela.ukupna_usteda
+        matrica_slotova = najbolja_pcela.matrica_slotova
         
         ukupan_fs_bez_ustede = trenutni_fs+ukupna_usteda
         sve_vrednosti.append({"ukupan_fs":trenutni_fs,
@@ -816,7 +849,8 @@ def main():
                               })
         print(*[f"ukupan fs sa ustedom: {trenutni_fs}",
                f"ukupna usteda : {ukupna_usteda}",
-               f"ukupan fs bez ustede : {ukupan_fs_bez_ustede}"], sep = "\n")
+               f"ukupan fs bez ustede : {ukupan_fs_bez_ustede}",
+               parsiraj_matrica_slotova(matrica_slotova)], sep = "\n")
         print(f"The iteration {i+1}. is finished")
         print("\n\n")
     end_ukupno = time.time()
