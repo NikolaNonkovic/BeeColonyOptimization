@@ -712,7 +712,6 @@ def inicijalizacija(broj_pcela,
     if sort_req_reverse is True:
         ordering_of_requests = "sorted_reversed"
 
-    print("ordering_of_requests", ordering_of_requests)
     matrica_povezanosti = napravi_matricu_povezanosti_od_matrice_zahteva(matrica_zahteva)
 
     Graph = nx.from_numpy_matrix(matrica_linkova, create_using=nx.MultiDiGraph())
