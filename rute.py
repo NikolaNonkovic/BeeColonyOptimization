@@ -9,6 +9,7 @@ import math
 import random
 import copy
 import time
+from gooey import Gooey
 
 
 import sys
@@ -24,6 +25,7 @@ KAPACITET_TRANSMITERA = 8
 BROJ_REQUESTOVA_ZA_RAZMATRANJE_PO_ITERACIJI_PO_PCELI = 3
 BROJ_RUTA_K = 3
 BROJ_ITERACIJA = 3
+
 
 
 def parsing_argumts():
@@ -79,6 +81,10 @@ def parsing_argumts():
                         help='Sortiraj requestove od najvece ka najmanjoj vrednosti FS',
                         action='store_true')
 
+    parser.add_argument('-kf','--kriterijumska_funkcija', 
+                        help='Tip kriterijumske funkcije koja se koristi',
+                        default='min_fs', const='min_fs', nargs='?', choices=['min_fs','max_c'])
+
 
     args = parser.parse_args()
     matrica_linkova_file_name = args.matrica_linkova
@@ -89,6 +95,8 @@ def parsing_argumts():
     matrica_zahteva = ucitaj_matricu_zahteva(args.matrica_zahteva)
     sort_req = args.sort_req
     sort_req_reverse = args.sort_req_reverse
+    kriterijumska_funkcija = args.kriterijumska_funkcija
+    
     
     KAPACITET_TRANSMITERA = args.kapacitet_trasmitera
     ZASTITNI_OPSEG = args.zastitni_opseg
@@ -97,7 +105,7 @@ def parsing_argumts():
     BROJ_ITERACIJA = args.broj_iteracija
 
 
-    return matrica_linkova_file_name, broj_pcela, min_slot, max_slot, output, matrica_zahteva, sort_req, sort_req_reverse
+    return matrica_linkova_file_name, broj_pcela, min_slot, max_slot, output, matrica_zahteva, sort_req, sort_req_reverse, kriterijumska_funkcija
 
 def ucitaj_matricu_zahteva(matrica_zahteva):
     if matrica_zahteva is None:
@@ -130,7 +138,9 @@ def napravi_matricu(donja_granica,
 
 
 def napravi_matricu_povezanosti_od_matrice_zahteva(matrica_zahteva):
-    matrica_povezanosti = [[i+1,position+1,number] for i,row in enumerate(matrica_zahteva) for position,number in enumerate(row) if position!=i]
+    matrica_povezanosti = [[i+1,position+1,number] 
+                            for i,row in enumerate(matrica_zahteva) 
+                                for position,number in enumerate(row) if position!=i]
     return matrica_povezanosti
             
 
@@ -162,7 +172,7 @@ class Pcela:
         self._rute = rute
         self._trenutni_fs = trenutni_fs
         self._matrica_slotova = matrica_slotova
-        self._ukupna_usteda = 0
+        self._ukupna_usteda = np.int64(0)
         
         
     @property
@@ -618,12 +628,12 @@ def racunaj_startu_poziciju_za_popunjavanje_matrice(rute, matrica_slotova_as_dic
     return ruta_sa_najmanjim_indeksom
 
     
-def racunaj_verovatnoce(pcela,
+def racunaj_verovatnoce_min_fs(pcela,
                           fs_min,
                           fs_max,
                           random_rud,
                           ob_sum_recruter):
-    
+
     fb = pcela.trenutni_fs
     ob = (fs_max-fb)/(fs_max-fs_min)
     pb_loyal = 1-math.log10((1+(1-ob)))
@@ -643,7 +653,7 @@ def racunaj_verovatnoce(pcela,
 def vrati_random_broj():
     return random.uniform(0, 1)
 
-def poredi_pcele(lista_pcela):
+def poredi_pcele_min_fs(lista_pcela):
     
     random_rud = vrati_random_broj()
 
@@ -651,8 +661,11 @@ def poredi_pcele(lista_pcela):
     ob_sum_recruter = 0
     fs_min = min(lista_pcela,key = lambda pcela: pcela.trenutni_fs).trenutni_fs
     fs_max = max(lista_pcela,key = lambda pcela: pcela.trenutni_fs).trenutni_fs
+    if fs_min == fs_max: # znaci da su sve pcele identicne 
+        lista_pcela = [lista_pcela[0]]
+    print ("fs_max",fs_max,"fs_min", fs_min)
     for pcela in lista_pcela:
-        ob_sum_recruter, pcela_sa_verovatnocama  = racunaj_verovatnoce(pcela,
+        ob_sum_recruter, pcela_sa_verovatnocama  = racunaj_verovatnoce_min_fs(pcela,
                                                  fs_min,
                                                  fs_max,
                                                  random_rud,
@@ -660,6 +673,53 @@ def poredi_pcele(lista_pcela):
         pcela_parcijalno_resenje_sa_verovatnocama.append(pcela_sa_verovatnocama)
         
 
+    lista_pcela_posle_follow_recruter_faze = regrutacija_pcela(pcela_parcijalno_resenje_sa_verovatnocama,
+                                                               ob_sum_recruter)
+    
+    return lista_pcela_posle_follow_recruter_faze
+
+
+def racunaj_verovatnoce_max_c(pcela,
+                          ukupna_usteda_min,
+                          ukupna_usteda_max,
+                          random_rud,
+                          ob_sum_recruter):
+    
+    fb = pcela.ukupna_usteda
+    ob = (abs(fb-ukupna_usteda_max))/(ukupna_usteda_max-ukupna_usteda_min)
+    pb_loyal = 1-math.log10((1+(1-ob)))
+    
+    is_follower = True if pb_loyal <= random_rud else False
+
+    if is_follower is False:
+        ob_sum_recruter += ob
+    
+    return ob_sum_recruter, {"pcela":pcela,
+                                "ob":ob,
+                                "pb_loyal":pb_loyal,
+                                "is_follower":is_follower}
+
+
+def poredi_pcele_max_ukupna_usteda(lista_pcela):
+    
+    random_rud = vrati_random_broj()
+
+    pcela_parcijalno_resenje_sa_verovatnocama = []
+    ob_sum_recruter = 0
+    ukupna_usteda_min = min(lista_pcela,key = lambda pcela: pcela.ukupna_usteda).ukupna_usteda
+    ukupna_usteda_max = max(lista_pcela,key = lambda pcela: pcela.ukupna_usteda).ukupna_usteda
+    if ukupna_usteda_min == ukupna_usteda_max: # znaci da su sve pcele identicne 
+        lista_pcela = [lista_pcela[0]]
+    print ("ukupna_usteda_max",ukupna_usteda_max,"ukupna_usteda_min", ukupna_usteda_min)
+    for pcela in lista_pcela:
+        ob_sum_recruter, pcela_sa_verovatnocama  = racunaj_verovatnoce_max_c(pcela,
+                                                 ukupna_usteda_min,
+                                                 ukupna_usteda_max,
+                                                 random_rud,
+                                                 ob_sum_recruter)
+        pcela_parcijalno_resenje_sa_verovatnocama.append(pcela_sa_verovatnocama)
+        
+    #print ("pcela_parcijalno_resenje_sa_verovatnocama",pcela_parcijalno_resenje_sa_verovatnocama, "ob_sum_recruter",ob_sum_recruter)
     lista_pcela_posle_follow_recruter_faze = regrutacija_pcela(pcela_parcijalno_resenje_sa_verovatnocama,
                                                                ob_sum_recruter)
     
@@ -726,15 +786,19 @@ def inicijalizacija(broj_pcela,
 
 
 #proveri kako da uradis deep copy klase :) mozes damo da je iniciras, tako sto pokupis property-ije ali moze isto da pogledas __deepcopy__
-def jedno_grupisanje(lista_pcela,Graph):
+def jedno_grupisanje(lista_pcela, Graph, kriterijumska_funkcija):
     for pcela in lista_pcela:
         uzmi_n_requsteova_sa_pocekta_pcele(pcela,Graph)
 
-    lista_pcela_posle_follow_recruter_faze = poredi_pcele(lista_pcela)
+    if kriterijumska_funkcija == "min_fs":
+        lista_pcela_posle_follow_recruter_faze = poredi_pcele_min_fs(lista_pcela)
+    elif kriterijumska_funkcija == "max_c":
+        lista_pcela_posle_follow_recruter_faze = poredi_pcele_max_ukupna_usteda(lista_pcela)
 
     return lista_pcela_posle_follow_recruter_faze
 
 def stop_kriterijum(lista_pcela):
+    print(*(pcela.rute.size for pcela in lista_pcela))
     return all(True if pcela.rute.size == 0 else False for pcela in lista_pcela )
 
 
@@ -787,7 +851,7 @@ def parsiraj_matrica_slotova(matrica_slotova):
 
 def main():
     
-    matrica_linkova_file_name, broj_pcela, min_slot, max_slot, file_name, matrica_zahteva, sort_req, sort_req_reverse = parsing_argumts()
+    matrica_linkova_file_name, broj_pcela, min_slot, max_slot, file_name, matrica_zahteva, sort_req, sort_req_reverse, kriterijumska_funkcija = parsing_argumts()
     matrica_linkova = load_matrices_from_files_names(matrica_linkova_file_name)
     
 
@@ -829,13 +893,16 @@ def main():
         print(f"The iteration {i+1}. started")
         lista_pcela = copy.deepcopy(lista_pcela_pocenta)
         while not stop_kriterijum(lista_pcela):
-            lista_pcela = jedno_grupisanje(lista_pcela,Graph)
+            lista_pcela = jedno_grupisanje(lista_pcela,Graph,kriterijumska_funkcija)
             m += 1
         end = time.time()
         
         vreme_egzekucije = end - start
         print(f"Time of execution per iteration:{vreme_egzekucije}")
-        najbolja_pcela = min(lista_pcela,key = lambda x: x.trenutni_fs)
+        if kriterijumska_funkcija == "min_fs":
+            najbolja_pcela = min(lista_pcela,key = lambda x: x.trenutni_fs)
+        elif kriterijumska_funkcija == "max_c":
+            najbolja_pcela = max(lista_pcela,key = lambda x: x.ukupna_usteda)
         trenutni_fs = najbolja_pcela.trenutni_fs
         ukupna_usteda = najbolja_pcela.ukupna_usteda
         matrica_slotova = najbolja_pcela.matrica_slotova
