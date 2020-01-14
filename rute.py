@@ -27,7 +27,7 @@ BROJ_RUTA_K = 3
 BROJ_ITERACIJA = 3
 
 
-
+#@Gooey
 def parsing_argumts():
     
     global ZASTITNI_OPSEG,KAPACITET_TRANSMITERA, BROJ_REQUESTOVA_ZA_RAZMATRANJE_PO_ITERACIJI_PO_PCELI,BROJ_RUTA_K, BROJ_ITERACIJA
@@ -83,7 +83,7 @@ def parsing_argumts():
 
     parser.add_argument('-kf','--kriterijumska_funkcija', 
                         help='Tip kriterijumske funkcije koja se koristi',
-                        default='min_fs', const='min_fs', nargs='?', choices=['min_fs','max_c'])
+                        default='min_fs', const='min_fs', nargs='?', choices=['min_fs','max_c','min_t'])
 
 
     args = parser.parse_args()
@@ -167,12 +167,19 @@ def all_paths(Graph, pocetni_cvor, terminalni_cvor):
 
 
 class Pcela:
-    __slots__ = ['_rute', '_trenutni_fs', '_matrica_slotova','_ukupna_usteda']
+    __slots__ = ['_rute', 
+                 '_trenutni_fs', 
+                 '_matrica_slotova',
+                 '_ukupna_usteda', 
+                 '_kapacitet_iskoricenosti',
+                 '_broj_transmitera']
     def __init__(self,rute, trenutni_fs, matrica_slotova):
         self._rute = rute
         self._trenutni_fs = trenutni_fs
         self._matrica_slotova = matrica_slotova
         self._ukupna_usteda = np.int64(0)
+        self._kapacitet_iskoricenosti = 0
+        self._broj_transmitera = 0
         
         
     @property
@@ -224,13 +231,40 @@ class Pcela:
     def ukupna_usteda(self):
         del self._ukupna_usteda
     
-    
+
+    @property
+    def kapacitet_iskoricenosti(self):
+        return self._kapacitet_iskoricenosti
+
+    @kapacitet_iskoricenosti.setter
+    def kapacitet_iskoricenosti(self, value):
+        self._kapacitet_iskoricenosti = value
+
+    @kapacitet_iskoricenosti.deleter
+    def kapacitet_iskoricenosti(self):
+        del self._kapacitet_iskoricenosti
+        
+        
+    @property
+    def broj_transmitera(self):
+        return self._broj_transmitera
+
+    @broj_transmitera.setter
+    def broj_transmitera(self, value):
+        self._broj_transmitera = value
+
+    @broj_transmitera.deleter
+    def broj_transmitera(self):
+        del self._broj_transmitera
+        
     
     def __repr__(self):
         return f"""rute: {self._rute}
                   trenutni_fs: {self._trenutni_fs}
                   matrica_slotova: {self._matrica_slotova},
-                  ukupna_usteda: {self.ukupna_usteda}"""
+                  ukupna_usteda: {self.ukupna_usteda}
+                  kapacitet_iskoricenosti: {self.kapacitet_iskoricenosti}
+                  broj_transmitera: {self.broj_transmitera}"""
         
 
 def pravljenje_liste_pcela_sa_izmesanim_rutama(broj_pcela, 
@@ -399,8 +433,8 @@ def trazi_sve_preklapajuce_rute_medju_requestovima_sa_istim_pocetnim_cvorom(inde
             H = ruta_sa_najvecim_H[1]
             if H > 0:
                 #ako je vece od nule dodaj za transmisiju
-                if kapacitet_transmitera + H < KAPACITET_TRANSMITERA:
-                    kapacitet_transmitera += H
+                if kapacitet_transmitera + fs < KAPACITET_TRANSMITERA:
+                    kapacitet_transmitera += fs
                     lista_odabranih_ruta_i_meta_informacija.append([ruta_sa_najvecim_H[0],
                                                                 ("fs_vrednost",fs),
                                                                 ("ostatak_cvorova",ruta_sa_najvecim_H_ostatak_cvorova),
@@ -429,9 +463,18 @@ def trazi_sve_preklapajuce_rute_medju_requestovima_sa_istim_pocetnim_cvorom(inde
         index_u_matrici_rute_koja_se_poredi = ruta_sa_najmanjim_indeksom["index_u_matrici"]
         indeksi_requstova_koji_su_ostali.extend(indeksi_requstova_koji_su_uzeti)
         lista_odabranih_ruta_i_fs_vrednosti = lista_odabranih_ruta_i_meta_informacija
+        fs = ruta_sa_kojom_se_poredi[1][1]
+        kapacitet_transmitera += fs
     
-    
-    return lista_odabranih_ruta_i_fs_vrednosti, indeksi_requstova_koji_su_ostali, index_u_matrici_rute_koja_se_poredi
+
+    if kapacitet_transmitera == 0:
+        # ovo znaci je za sve rute H<0 pa zato se ne jedna nije grupisala pa uzmi samo fs od ruta_sa_kojom_se_poredi
+        fs = ruta_sa_kojom_se_poredi[1][1]
+        kapacitet_transmitera += fs
+
+    kapacitet_iskoricenosti = kapacitet_transmitera/ KAPACITET_TRANSMITERA
+
+    return lista_odabranih_ruta_i_fs_vrednosti, indeksi_requstova_koji_su_ostali, index_u_matrici_rute_koja_se_poredi, kapacitet_iskoricenosti
        
 
 def proveri_da_li_se_ostaci_grupisanim_ruta_preklapaju(lista_odabranih_ruta_i_meta_informacija,
@@ -478,6 +521,7 @@ def uzmi_n_requsteova_sa_pocekta_pcele(pcela,Graph):
     if len_pcela_rute < n_broj_requestova:
         n_broj_requestova = len_pcela_rute
     ostatak_requestova = pcela.rute[n_broj_requestova:]
+    kapacitet_iskoricenosti_pri_jednom_grupisanju = []
     for i in range(n_broj_requestova):
         pocetni_request = pcela.rute[i]
         # nadji_requestove_sa_istim_pocetnim_cvorom_u_pceli
@@ -486,7 +530,7 @@ def uzmi_n_requsteova_sa_pocekta_pcele(pcela,Graph):
         
         
 #        print("requestove_sa_istim_pocetnim_cvorom",requestove_sa_istim_pocetnim_cvorom)
-        lista_odabranih_ruta_i_fs_vrednosti, indeksi_requstova_koji_su_ostali, index_u_matrici_rute_koja_se_poredi = trazi_sve_preklapajuce_rute_medju_requestovima_sa_istim_pocetnim_cvorom(indeksi_requstova_koji_su_ostali,
+        lista_odabranih_ruta_i_fs_vrednosti, indeksi_requstova_koji_su_ostali, index_u_matrici_rute_koja_se_poredi, kapacitet_iskoricenosti = trazi_sve_preklapajuce_rute_medju_requestovima_sa_istim_pocetnim_cvorom(indeksi_requstova_koji_su_ostali,
                                                                                                                                                         indeksi_requstova_koji_su_uzeti,
                                                                                                                                                         requestove_sa_istim_pocetnim_cvorom,
                                                                                                                                                         Graph,
@@ -497,10 +541,16 @@ def uzmi_n_requsteova_sa_pocekta_pcele(pcela,Graph):
                                      pcela.matrica_slotova,
                                      pcela.ukupna_usteda,
                                      Graph,
-                                     index_u_matrici_rute_koja_se_poredi)       
+                                     index_u_matrici_rute_koja_se_poredi)
+        
+        kapacitet_iskoricenosti_pri_jednom_grupisanju.append(kapacitet_iskoricenosti)
         
     pcela.rute = ostatak_requestova
     pcela.trenutni_fs = racunaj_sumu_trenutnog_fs(pcela.matrica_slotova)
+    
+    pcela.kapacitet_iskoricenosti = sum(kapacitet_iskoricenosti_pri_jednom_grupisanju)/n_broj_requestova
+    
+    pcela.broj_transmitera = n_broj_requestova
         
     return pcela
     
@@ -725,6 +775,54 @@ def poredi_pcele_max_ukupna_usteda(lista_pcela):
     
     return lista_pcela_posle_follow_recruter_faze
 
+def racunaj_verovatnoce_min_t(pcela,
+                          ukupna_usteda_min,
+                          ukupna_usteda_max,
+                          random_rud,
+                          ob_sum_recruter):
+    
+    x_1 = pcela.broj_transmitera
+    x_2 = pcela.kapacitet_iskoricenosti
+    a = 0.5
+    ob = a*x_1+(1-a)*(1/x_2)
+    pb_loyal = 1-math.log10((1+(1-ob)))
+    
+    is_follower = True if pb_loyal <= random_rud else False
+
+    if is_follower is False:
+        ob_sum_recruter += ob
+    
+    return ob_sum_recruter, {"pcela":pcela,
+                                "ob":ob,
+                                "pb_loyal":pb_loyal,
+                                "is_follower":is_follower}
+
+
+def poredi_pcele_min_t(lista_pcela):
+    
+    random_rud = vrati_random_broj()
+
+    pcela_parcijalno_resenje_sa_verovatnocama = []
+    ob_sum_recruter = 0
+    ukupna_usteda_min = min(lista_pcela,key = lambda pcela: pcela.ukupna_usteda).ukupna_usteda
+    ukupna_usteda_max = max(lista_pcela,key = lambda pcela: pcela.ukupna_usteda).ukupna_usteda
+    if ukupna_usteda_min == ukupna_usteda_max: # znaci da su sve pcele identicne 
+        lista_pcela = [lista_pcela[0]]
+    print ("ukupna_usteda_max",ukupna_usteda_max,"ukupna_usteda_min", ukupna_usteda_min)
+    for pcela in lista_pcela:
+        ob_sum_recruter, pcela_sa_verovatnocama  = racunaj_verovatnoce_max_c(pcela,
+                                                 ukupna_usteda_min,
+                                                 ukupna_usteda_max,
+                                                 random_rud,
+                                                 ob_sum_recruter)
+        pcela_parcijalno_resenje_sa_verovatnocama.append(pcela_sa_verovatnocama)
+        
+    #print ("pcela_parcijalno_resenje_sa_verovatnocama",pcela_parcijalno_resenje_sa_verovatnocama, "ob_sum_recruter",ob_sum_recruter)
+    lista_pcela_posle_follow_recruter_faze = regrutacija_pcela(pcela_parcijalno_resenje_sa_verovatnocama,
+                                                               ob_sum_recruter)
+    
+    return lista_pcela_posle_follow_recruter_faze
+
 def regrutacija_pcela(pcela_parcijalno_resenje_sa_verovatnocama,ob_sum_recruter):
     
     verovatnoca_regruteri = [(index_rekrutera ,pcela_i_verovatnoce["ob"]/ob_sum_recruter) 
@@ -794,6 +892,8 @@ def jedno_grupisanje(lista_pcela, Graph, kriterijumska_funkcija):
         lista_pcela_posle_follow_recruter_faze = poredi_pcele_min_fs(lista_pcela)
     elif kriterijumska_funkcija == "max_c":
         lista_pcela_posle_follow_recruter_faze = poredi_pcele_max_ukupna_usteda(lista_pcela)
+    elif kriterijumska_funkcija == "max_c":
+        lista_pcela_posle_follow_recruter_faze = poredi_pcele_min_t(lista_pcela)
 
     return lista_pcela_posle_follow_recruter_faze
 
