@@ -548,12 +548,24 @@ def uzmi_n_requsteova_sa_pocekta_pcele(pcela,Graph):
     pcela.rute = ostatak_requestova
     pcela.trenutni_fs = racunaj_sumu_trenutnog_fs(pcela.matrica_slotova)
     
-    pcela.kapacitet_iskoricenosti = sum(kapacitet_iskoricenosti_pri_jednom_grupisanju)/n_broj_requestova
-    
-    pcela.broj_transmitera = n_broj_requestova
+     
+    procenat_iskoriscenosti = sum(kapacitet_iskoricenosti_pri_jednom_grupisanju)/n_broj_requestova
+    broj_transmitera = n_broj_requestova
+    pcela.kapacitet_iskoricenosti += racunaj_iskoriscenost_transmitera_min_t(broj_transmitera, 
+                                                                     procenat_iskoriscenosti)
         
     return pcela
+
+
+def racunaj_iskoriscenost_transmitera_min_t(broj_transmitera, 
+                                     procenat_iskoriscenosti, 
+                                     tezinski_faktor= 0.5):
+    x_1 = broj_transmitera
+    x_2 = procenat_iskoriscenosti
+    a = tezinski_faktor
+    min_T = a*x_1+(1-a)*(1/x_2)
     
+    return min_T
 
 def racunaj_sumu_trenutnog_fs(matrica_slotova):
     # +1 zato sto ako je vrednost '4_5': [0, 2] znaci da su popunjenji slotovi 0,1,2
@@ -776,15 +788,13 @@ def poredi_pcele_max_ukupna_usteda(lista_pcela):
     return lista_pcela_posle_follow_recruter_faze
 
 def racunaj_verovatnoce_min_t(pcela,
-                          ukupna_usteda_min,
-                          ukupna_usteda_max,
+                          kapacitet_iskoricenosti_min,
+                          kapacitet_iskoricenosti_max,
                           random_rud,
                           ob_sum_recruter):
     
-    x_1 = pcela.broj_transmitera
-    x_2 = pcela.kapacitet_iskoricenosti
-    a = 0.5
-    ob = a*x_1+(1-a)*(1/x_2)
+    fb = pcela.kapacitet_iskoricenosti
+    ob = (kapacitet_iskoricenosti_max-fb)/(kapacitet_iskoricenosti_max-kapacitet_iskoricenosti_min)
     pb_loyal = 1-math.log10((1+(1-ob)))
     
     is_follower = True if pb_loyal <= random_rud else False
@@ -804,15 +814,15 @@ def poredi_pcele_min_t(lista_pcela):
 
     pcela_parcijalno_resenje_sa_verovatnocama = []
     ob_sum_recruter = 0
-    ukupna_usteda_min = min(lista_pcela,key = lambda pcela: pcela.ukupna_usteda).ukupna_usteda
-    ukupna_usteda_max = max(lista_pcela,key = lambda pcela: pcela.ukupna_usteda).ukupna_usteda
-    if ukupna_usteda_min == ukupna_usteda_max: # znaci da su sve pcele identicne 
+    kapacitet_iskoricenosti_min = min(lista_pcela,key = lambda pcela: pcela.kapacitet_iskoricenosti).kapacitet_iskoricenosti
+    kapacitet_iskoricenosti_max = max(lista_pcela,key = lambda pcela: pcela.kapacitet_iskoricenosti).kapacitet_iskoricenosti
+    if kapacitet_iskoricenosti_min == kapacitet_iskoricenosti_max: # znaci da su sve pcele identicne 
         lista_pcela = [lista_pcela[0]]
-    print ("ukupna_usteda_max",ukupna_usteda_max,"ukupna_usteda_min", ukupna_usteda_min)
+    print ("kapacitet_iskoricenosti_min",kapacitet_iskoricenosti_min,"kapacitet_iskoricenosti_max", kapacitet_iskoricenosti_max)
     for pcela in lista_pcela:
-        ob_sum_recruter, pcela_sa_verovatnocama  = racunaj_verovatnoce_max_c(pcela,
-                                                 ukupna_usteda_min,
-                                                 ukupna_usteda_max,
+        ob_sum_recruter, pcela_sa_verovatnocama  = racunaj_verovatnoce_min_t(pcela,
+                                                 kapacitet_iskoricenosti_min,
+                                                 kapacitet_iskoricenosti_max,
                                                  random_rud,
                                                  ob_sum_recruter)
         pcela_parcijalno_resenje_sa_verovatnocama.append(pcela_sa_verovatnocama)
@@ -892,7 +902,7 @@ def jedno_grupisanje(lista_pcela, Graph, kriterijumska_funkcija):
         lista_pcela_posle_follow_recruter_faze = poredi_pcele_min_fs(lista_pcela)
     elif kriterijumska_funkcija == "max_c":
         lista_pcela_posle_follow_recruter_faze = poredi_pcele_max_ukupna_usteda(lista_pcela)
-    elif kriterijumska_funkcija == "max_c":
+    elif kriterijumska_funkcija == "min_t":
         lista_pcela_posle_follow_recruter_faze = poredi_pcele_min_t(lista_pcela)
 
     return lista_pcela_posle_follow_recruter_faze
@@ -1003,6 +1013,8 @@ def main():
             najbolja_pcela = min(lista_pcela,key = lambda x: x.trenutni_fs)
         elif kriterijumska_funkcija == "max_c":
             najbolja_pcela = max(lista_pcela,key = lambda x: x.ukupna_usteda)
+        elif kriterijumska_funkcija == "min_t":
+            najbolja_pcela = min(lista_pcela,key = lambda x: x.kapacitet_iskoricenosti)
         trenutni_fs = najbolja_pcela.trenutni_fs
         ukupna_usteda = najbolja_pcela.ukupna_usteda
         matrica_slotova = najbolja_pcela.matrica_slotova
